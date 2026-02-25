@@ -311,42 +311,6 @@ function workFunction(input) {
                 const lastTwoDigits = `${pk}${qk}`.padStart(2, '0');
                 const next_k = k + 1;
                 
-                // Compute baseSum for next position (k+1) incrementally from current baseSum
-                // baseSum(k) = Σ(i=2 to k-1) p_i * q_{k-i+1}
-                // baseSum(k+1) = Σ(i=2 to k) p_i * q_{k-i+2}
-                // For each existing term i in [2, k-1]: 
-                //   - Old: p_i * q_{k-i+1} (q at index k-i)
-                //   - New: p_i * q_{k-i+2} (q at index k-i+1, which is q_{k-i+1} from old array)
-                // So we adjust: subtract p_i * q_{old_index}, add p_i * q_{new_index}
-                // Then add new term: p_k * q_2
-                let nextBaseSum = 0;
-                if (next_k > 1) {
-                    if (k === 1) {
-                        // For k=1, baseSum was 0, so nextBaseSum is also 0
-                        nextBaseSum = 0;
-                    } else {
-                        // Start with current baseSum and adjust for shifted q indices
-                        nextBaseSum = baseSum;
-                        // Adjust each existing term: q index shifts from (k-i) to (k-i+1)
-                        for (let i = 2; i < k; i++) {
-                            const p_idx = i - 1;
-                            const old_q_idx = k - i;  // q_{k-i+1} in old array
-                            const new_q_idx = k - i + 1;  // q_{k-i+2} in new array
-                            if (p_idx < p_history.length && 
-                                old_q_idx >= 0 && old_q_idx < q_history.length &&
-                                new_q_idx >= 0 && new_q_idx < next_q_history.length) {
-                                // Subtract old term, add new term
-                                nextBaseSum -= multiplyDigits(p_history[p_idx], q_history[old_q_idx]);
-                                nextBaseSum += multiplyDigits(p_history[p_idx], next_q_history[new_q_idx]);
-                            }
-                        }
-                        // Add new term: p_k * q_2 (q_2 is at index 1)
-                        if (next_q_history.length > 1) {
-                            nextBaseSum += multiplyDigits(pk, next_q_history[1]);
-                        }
-                    }
-                }
-                
                 nextStates.push({
                     k: next_k,
                     p_history: next_p_history,
@@ -354,7 +318,6 @@ function workFunction(input) {
                     P_value: new_P_value,
                     Q_value: new_Q_value,
                     carry_in: carry_out,
-                    baseSum: nextBaseSum,
                     pk: pk,
                     qk: qk,
                     lastTwoDigits: lastTwoDigits

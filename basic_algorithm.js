@@ -70,30 +70,6 @@ function workFunction(input) {
                     const lastTwoDigits = `${pk}${qk}`.padStart(2, '0');
                     const next_k = k + 1;
                     
-                    // Compute baseSum for next position
-                    let nextBaseSum = 0;
-                    if (next_k > 1) {
-                        if (k === 1) {
-                            nextBaseSum = 0;
-                        } else {
-                            nextBaseSum = baseSum;
-                            for (let i = 2; i < k; i++) {
-                                const p_idx = i - 1;
-                                const old_q_idx = k - i;
-                                const new_q_idx = k - i + 1;
-                                if (p_idx < p_history.length && 
-                                    old_q_idx >= 0 && old_q_idx < q_history.length &&
-                                    new_q_idx >= 0 && new_q_idx < next_q_history.length) {
-                                    nextBaseSum -= multiplyDigits(p_history[p_idx], q_history[old_q_idx]);
-                                    nextBaseSum += multiplyDigits(p_history[p_idx], next_q_history[new_q_idx]);
-                                }
-                            }
-                            if (next_q_history.length > 1) {
-                                nextBaseSum += multiplyDigits(pk, next_q_history[1]);
-                            }
-                        }
-                    }
-                    
                     nextStates.push({
                         k: next_k,
                         p_history: next_p_history,
@@ -101,7 +77,6 @@ function workFunction(input) {
                         P_value: new_P_value,
                         Q_value: new_Q_value,
                         carry_in: carry_out,
-                        baseSum: nextBaseSum,
                         pk: pk,
                         qk: qk,
                         lastTwoDigits: lastTwoDigits
