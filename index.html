@@ -709,16 +709,23 @@
         }
         
         function populatePrimeDropdowns() {
-            const primes = generatePrimes(200);
+            const primesP = generatePrimes(200);
+            const primesQ = generatePrimes(1000);
             const selectP = document.getElementById('primeP');
             const selectQ = document.getElementById('primeQ');
             
-            primes.forEach(prime => {
-                [selectP, selectQ].forEach(select => {
-                    const option = document.createElement('option');
-                    option.value = option.textContent = prime;
-                    select.appendChild(option);
-                });
+            // Populate p dropdown with primes up to 200
+            primesP.forEach(prime => {
+                const option = document.createElement('option');
+                option.value = option.textContent = prime;
+                selectP.appendChild(option);
+            });
+            
+            // Populate q dropdown with primes up to 1000
+            primesQ.forEach(prime => {
+                const option = document.createElement('option');
+                option.value = option.textContent = prime;
+                selectQ.appendChild(option);
             });
             
             selectP.value = '53';
