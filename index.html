@@ -977,6 +977,21 @@
             ['productN', 'currentK', 'activeBranches', 'maxActiveBranches', 'targetDigit'].forEach(id => {
                 document.getElementById(id).textContent = '-';
             });
+            
+            // Hide and clear pruning statistics chart
+            const pruningChartContainer = document.getElementById('pruningChartContainer');
+            if (pruningChartContainer) {
+                pruningChartContainer.style.display = 'none';
+                const pruningChart = document.getElementById('pruningChart');
+                const pruningLegend = document.getElementById('pruningLegend');
+                if (pruningChart) {
+                    const ctx = pruningChart.getContext('2d');
+                    ctx.clearRect(0, 0, pruningChart.width, pruningChart.height);
+                }
+                if (pruningLegend) {
+                    pruningLegend.innerHTML = '';
+                }
+            }
         }
 
         function generatePrimes(max) {

@@ -2,6 +2,8 @@
 
 **Φᵈᶜᵖ** (Phi-DCP) is a revolutionary approach to integer factorization that combines **Integer Vector Inversion (IVI)** with the **Distributive Compute Protocol (DCP)** to achieve linear-time factorization of semiprimes through decentralized computation.
 
+🌐 **[Try it live →](https://exergy-connect.github.io/dcp-factor/)**
+
 ## Overview
 
 Traditional factorization methods like the General Number Field Sieve (GNFS) require massive computational resources and sub-exponential time. Φᵈᶜᵖ transforms this problem by:
