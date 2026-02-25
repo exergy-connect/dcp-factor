@@ -229,6 +229,16 @@
             flex-shrink: 0;
         }
 
+        .copyright {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            color: rgba(0, 191, 255, 0.6);
+            font-size: 0.85em;
+            font-family: Arial, sans-serif;
+            z-index: 100;
+        }
+
         .success {
             color: #00ff88;
             text-shadow: 0 0 20px rgba(0, 255, 136, 0.8);
@@ -264,10 +274,12 @@
             <button id="startBtn" onclick="startVisualization()">Start Factorization</button>
             <button id="resetBtn" onclick="resetVisualization()">Reset</button>
             <div class="control-group">
-                <label for="pauseCheckbox">
-                    <input type="checkbox" id="pauseCheckbox">
-                    Pause after each step
-                </label>
+                <label for="speedSelect">Speed:</label>
+                <select id="speedSelect">
+                    <option value="1sec">1 sec pause</option>
+                    <option value="step">Step through</option>
+                    <option value="asap" selected>ASAP</option>
+                </select>
             </div>
         </div>
 
@@ -295,7 +307,12 @@
         </div>
 
         <div class="visualization">
-            <canvas id="canvas"></canvas>
+            <div id="pruningChartContainer" style="display: none; position: absolute; left: 15px; top: 15px; z-index: 10; padding: 15px; background: rgba(26, 26, 46, 0.95); border-radius: 8px; border: 1px solid rgba(0, 191, 255, 0.3); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);">
+                <div style="text-align: center; color: #00bfff; margin-bottom: 8px; font-size: 0.9em; font-weight: 600;">Pruning Statistics</div>
+                <canvas id="pruningChart" width="200" height="200" style="display: block; margin: 0 auto;"></canvas>
+                <div id="pruningLegend" style="margin-top: 10px; display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; font-size: 0.75em;"></div>
+            </div>
+            <canvas id="canvas" style="width: 100%; height: 100%;"></canvas>
         </div>
 
         <div class="legend">
@@ -314,7 +331,12 @@
         </div>
 
         <div class="status" id="status"></div>
+        
+        <!-- Tooltip for pruning statistics -->
+        <div id="pruningTooltip" style="display: none; position: fixed; background: rgba(26, 26, 46, 0.95); color: #00bfff; padding: 8px 12px; border-radius: 6px; border: 1px solid #00bfff; font-size: 0.85em; max-width: 250px; z-index: 1000; pointer-events: none; box-shadow: 0 4px 12px rgba(0, 191, 255, 0.3);"></div>
     </div>
+    
+    <div class="copyright">© Exergy ∞ LLC</div>
 
     <script src="common.js"></script>
     <script>
@@ -402,6 +424,7 @@
         }
 
         function resizeCanvas() {
+            const canvas = document.getElementById('canvas');
             const visualization = canvas.parentElement;
             canvas.width = visualization.offsetWidth - 20;
             canvas.height = visualization.offsetHeight - 20;
@@ -671,6 +694,156 @@
             }
         }
 
+        function drawPruningChart(state) {
+            if (!state.pruningStats || state.algorithm !== 'pruning') {
+                return; // Only show for pruning algorithm
+            }
+            
+            const container = document.getElementById('pruningChartContainer');
+            const canvas = document.getElementById('pruningChart');
+            const legend = document.getElementById('pruningLegend');
+            
+            if (!container || !canvas || !legend) return;
+            
+            const stats = state.pruningStats;
+            const stepNames = {
+                1: 'Symmetry Elimination',
+                2: 'Exact Termination',
+                3: 'Immediate Overshoot',
+                4: 'Sqrt-Based Bound',
+                5: 'Growth Envelope',
+                6: 'Min Contribution',
+                7: 'Linear-Term Gap',
+                8: 'Upper Tail',
+                9: 'Length Split'
+            };
+            
+            const stepDescriptions = {
+                1: 'Enforces P ≤ Q to halve the search space by eliminating symmetric factor pairs',
+                2: 'Validates final state: rejects if product ≠ N, factors ≤ 1, or zero values',
+                3: 'Rejects branches where current product P×Q already exceeds target N',
+                4: 'Uses sqrt(N) bound: if P > sqrt(N), then P×Q > N (since P ≤ Q)',
+                5: 'Checks if maximum possible future contribution can reach the gap to N',
+                6: 'Rejects if minimum possible future contribution exceeds the gap to N',
+                7: 'Verifies linear and quadratic terms together can bridge the gap',
+                8: 'Division-based coupling: ensures Q ≥ ceil(N/Pmax) when Pmax ≤ sqrt(N)',
+                9: 'Checks if factor lengths are feasible (lenP + lenQ ≤ lenN + 1)'
+            };
+            
+            const colors = [
+                '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
+                '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B739'
+            ];
+            
+            // Filter out steps with zero prunings
+            const data = [];
+            let total = 0;
+            for (let step = 1; step <= 9; step++) {
+                const value = stats[step] || 0;
+                if (value > 0) {
+                    data.push({
+                        step: step,
+                        name: stepNames[step],
+                        value: value,
+                        color: colors[step - 1]
+                    });
+                    total += value;
+                }
+            }
+            
+            if (total === 0) {
+                container.style.display = 'none';
+                return;
+            }
+            
+            container.style.display = 'block';
+            
+            const ctx = canvas.getContext('2d');
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = Math.min(centerX, centerY) - 15;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw pie chart
+            let currentAngle = -Math.PI / 2; // Start at top
+            
+            data.forEach((item, index) => {
+                const sliceAngle = (item.value / total) * 2 * Math.PI;
+                
+                // Draw slice
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
+                ctx.closePath();
+                ctx.fillStyle = item.color;
+                ctx.fill();
+                ctx.strokeStyle = '#1a1a2e';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Draw label (only if slice is large enough)
+                if (sliceAngle > 0.1) {
+                    const labelAngle = currentAngle + sliceAngle / 2;
+                    const labelX = centerX + Math.cos(labelAngle) * (radius * 0.7);
+                    const labelY = centerY + Math.sin(labelAngle) * (radius * 0.7);
+                    const percentage = ((item.value / total) * 100).toFixed(1);
+                    
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 10px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(`${percentage}%`, labelX, labelY);
+                }
+                
+                currentAngle += sliceAngle;
+            });
+            
+            const tooltip = document.getElementById('pruningTooltip');
+            
+            function hideTooltip() {
+                tooltip.style.display = 'none';
+            }
+            
+            // Draw legend
+            legend.innerHTML = '';
+            data.forEach((item, index) => {
+                const percentage = ((item.value / total) * 100).toFixed(1);
+                const legendItem = document.createElement('div');
+                legendItem.style.display = 'flex';
+                legendItem.style.alignItems = 'center';
+                legendItem.style.gap = '6px';
+                legendItem.style.cursor = 'pointer';
+                legendItem.innerHTML = `
+                    <div style="width: 12px; height: 12px; background: ${item.color}; border: 1px solid #1a1a2e; border-radius: 3px; flex-shrink: 0;"></div>
+                    <span style="color: #00bfff;">#${item.step}</span>
+                    <span style="color: #fff;">${item.value.toLocaleString()} (${percentage}%)</span>
+                `;
+                
+                // Add tooltip to legend item that follows mouse
+                legendItem.addEventListener('mouseenter', (e) => {
+                    tooltip.innerHTML = `<strong>#${item.step}: ${stepNames[item.step]}</strong><br>${stepDescriptions[item.step]}`;
+                    tooltip.style.display = 'block';
+                    // Position tooltip close to mouse pointer on enter
+                    tooltip.style.left = (e.clientX + 10) + 'px';
+                    tooltip.style.top = (e.clientY + 10) + 'px';
+                });
+                
+                legendItem.addEventListener('mousemove', (e) => {
+                    // Position tooltip close to mouse pointer
+                    tooltip.style.left = (e.clientX + 10) + 'px';
+                    tooltip.style.top = (e.clientY + 10) + 'px';
+                });
+                
+                legendItem.addEventListener('mouseleave', () => {
+                    hideTooltip();
+                });
+                
+                legend.appendChild(legendItem);
+            });
+        }
+        
         function stopAnimation(message, className = '') {
             isRunning = false;
             const startBtn = document.getElementById('startBtn');
@@ -692,26 +865,39 @@
                 // Show final step, then display success message after a brief delay
                 setTimeout(() => {
                     stopAnimation(`SUCCESS! Found factors: p = ${algorithmState.foundP}, q = ${algorithmState.foundQ}`, 'success');
+                    drawPruningChart(algorithmState);
                 }, 1500);
                 return;
             }
 
             if (algorithmState.done) {
                 stopAnimation('Algorithm completed (no factors found)');
+                drawPruningChart(algorithmState);
                 return;
             }
 
-            const pauseCheckbox = document.getElementById('pauseCheckbox');
-            if (pauseCheckbox?.checked) {
+            const speedSelect = document.getElementById('speedSelect');
+            const speed = speedSelect?.value || 'asap';
+            
+            if (speed === 'step') {
+                // Step through mode: pause after each step
                 isRunning = false;
                 const startBtn = document.getElementById('startBtn');
                 startBtn.textContent = 'Continue';
                 startBtn.disabled = false;
             } else {
+                // Determine delay based on speed setting
+                let delay = 0;
+                if (speed === '1sec') {
+                    delay = 1000;
+                } else if (speed === 'asap') {
+                    delay = 10; // Minimal delay to allow UI updates
+                }
+                
                 setTimeout(() => {
                     algorithmState = stepAlgorithm(algorithmState);
                     animate();
-                }, 1500);
+                }, delay);
             }
         }
 
@@ -752,6 +938,8 @@
 
             isRunning = true;
             algorithmState = initializeAlgorithm(p, q);
+            // Store algorithm type for chart display
+            algorithmState.algorithm = selectedAlgorithm;
             const status = document.getElementById('status');
             status.textContent = 'Starting factorization...';
             status.className = 'status processing';
@@ -761,10 +949,20 @@
             drawVisualization(algorithmState);
             updateInfo(algorithmState);
 
+            // Use speed setting for initial delay
+            const speedSelect = document.getElementById('speedSelect');
+            const speed = speedSelect?.value || 'asap';
+            let delay = 10;
+            if (speed === '1sec') {
+                delay = 1000;
+            } else if (speed === 'step') {
+                delay = 0; // Will be handled in animate()
+            }
+            
             setTimeout(() => {
                 algorithmState = stepAlgorithm(algorithmState);
                 animate();
-            }, 1000);
+            }, delay);
         }
 
         function resetVisualization() {

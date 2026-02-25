@@ -42,12 +42,14 @@ function comparePartialNumbers(p_history, q_history) {
  * 
  * Implements comprehensive tightening per specification:
  * 1. Symmetry elimination (P ≤ Q) - halves search space
- * 2. Explicit growth envelope (replaces rectangle bounds)
- * 3. Minimum contribution pruning
- * 4. Linear-term gap feasibility
- * 5. Strengthened sqrt-based bounds with division coupling
- * 6. Length split feasibility
- * 7. Optimized BigInt multiplication count
+ * 2. Exact termination rule - validates final state
+ * 3. Immediate overshoot check - product already exceeds N
+ * 4. Sqrt-based hard bound - P > sqrtN implies P*Q > N
+ * 5. Explicit growth envelope (replaces rectangle bounds)
+ * 6. Minimum contribution pruning
+ * 7. Linear-term gap feasibility
+ * 8. Upper tail tightening (division-based coupling)
+ * 9. Length split feasibility
  * 
  * All arithmetic uses BigInt. No floating point, no heuristics.
  * Checks ordered for fail-fast performance.
@@ -59,7 +61,7 @@ function comparePartialNumbers(p_history, q_history) {
  * @param {number} k - Number of digits processed (after adding current digits)
  * @param {number} totalDigits - Total number of digits in N
  * @param {bigint} sqrtN - Precomputed floor(sqrt(N)) as BigInt
- * @returns {boolean} True if branch is globally feasible, false if it should be pruned
+ * @returns {number|boolean} Pruning step number (1-9) if pruned, 0 if feasible, true if exact match at termination
  */
 function globalFeasible(state, P_value, Q_value, N, k, totalDigits, sqrtN) {
     const remainingDigits = totalDigits - k;
@@ -67,39 +69,39 @@ function globalFeasible(state, P_value, Q_value, N, k, totalDigits, sqrtN) {
     // #1. Mandatory Symmetry Elimination (Search Space Halving)
     // Enforce P ≤ Q immediately after digit extension
     if (P_value > Q_value) {
-        return false;
+        return 1; // Pruned by step 1
     }
     
-    // #4. Exact Termination Rule
+    // #2. Exact Termination Rule
     // If remaining === 0, accept only if Pk * Qk === N
     // (carry_in === 0 is checked separately in workFunction)
     if (remainingDigits === 0) {
         // Reject trivial factor 1
         if (P_value <= 1n || Q_value <= 1n) {
-            return false;
+            return 2; // Pruned by step 2
         }
         
         // Reject actual zero values
         if (P_value === 0n || Q_value === 0n) {
-            return false;
+            return 2; // Pruned by step 2
         }
         
         // Exact product match required
         const product = P_value * Q_value;
-        return product === N;
+        return product === N ? true : 2; // true if match, 2 if pruned
     }
     
-    // #2. Immediate Overshoot Check (fail fast)
+    // #3. Immediate Overshoot Check (fail fast)
     // Compute base product once and reuse
     const base = P_value * Q_value;
     if (base > N) {
-        return false;
+        return 3; // Pruned by step 3
     }
     
-    // #5. Sqrt-Based Hard Bound (Strengthened with ordering)
+    // #4. Sqrt-Based Hard Bound (Strengthened with ordering)
     // Since P ≤ Q is enforced, if P > sqrtN, then P*Q > N
     if (P_value > sqrtN) {
-        return false;
+        return 4; // Pruned by step 4
     }
     
     // Compute gap once
@@ -107,7 +109,7 @@ function globalFeasible(state, P_value, Q_value, N, k, totalDigits, sqrtN) {
     
     // If gap < 0, we already pruned above, but check for safety
     if (gap < 0n) {
-        return false;
+        return 3; // Pruned by step 3 (overshoot)
     }
     
     // Compute M = 10^remaining - 1 (maximum tail value)
@@ -115,7 +117,7 @@ function globalFeasible(state, P_value, Q_value, N, k, totalDigits, sqrtN) {
     const powerK = powerOf10(k);
     const power2K = powerOf10(2 * k);
     
-    // #2. Explicit Growth Envelope (replaces Pmax * Qmax)
+    // #5. Explicit Growth Envelope (replaces Pmax * Qmax)
     // Maximum future contribution:
     // maxContribution = 10^k (Pk*M + Qk*M) + 10^(2k) M*M
     const maxLinearTerm = powerK * (P_value * M + Q_value * M);
@@ -123,10 +125,10 @@ function globalFeasible(state, P_value, Q_value, N, k, totalDigits, sqrtN) {
     const maxContribution = maxLinearTerm + maxQuadraticTerm;
     
     if (maxContribution < gap) {
-        return false;
+        return 5; // Pruned by step 5
     }
     
-    // #3. Minimum Contribution Pruning
+    // #6. Minimum Contribution Pruning
     // Minimum occurs at A=0, B=0, but tighten for remaining === 1
     // However, if gap is already 0 or very small, we might be at the solution
     // Only apply minimum contribution check if gap is significant
@@ -141,17 +143,17 @@ function globalFeasible(state, P_value, Q_value, N, k, totalDigits, sqrtN) {
         
         const minContribution = powerK * (P_value * minB + Q_value * minA) + power2K * (minA * minB);
         if (minContribution > gap) {
-            return false;
+            return 6; // Pruned by step 6
         }
     }
     
-    // #4. Linear-Term Gap Feasibility (Stronger Mid-Depth Pruning)
+    // #7. Linear-Term Gap Feasibility (Stronger Mid-Depth Pruning)
     // Check if linear term alone is insufficient, even with quadratic
     if (maxLinearTerm + maxQuadraticTerm < gap) {
-        return false; // Already checked above, but explicit for clarity
+        return 5; // Pruned by step 5 (already checked above)
     }
     
-    // #5. Upper Tail Tightening (Division-Based Coupling)
+    // #8. Upper Tail Tightening (Division-Based Coupling)
     // If Pmax ≤ sqrtN, then Q must satisfy Q ≥ ceil(N / Pmax)
     const Pmax = P_value + M * powerK;
     if (Pmax <= sqrtN) {
@@ -160,11 +162,11 @@ function globalFeasible(state, P_value, Q_value, N, k, totalDigits, sqrtN) {
         const minRequiredQ = (N + Pmax - 1n) / Pmax;
         const Qmax = Q_value + M * powerK;
         if (Qmax < minRequiredQ) {
-            return false;
+            return 8; // Pruned by step 8
         }
     }
     
-    // #6. Length Split Feasibility
+    // #9. Length Split Feasibility
     // Valid factors must satisfy: lenP + lenQ = lenN OR lenN + 1
     // Estimate current effective lengths
     // If both P and Q already require too many digits, prune
@@ -172,7 +174,7 @@ function globalFeasible(state, P_value, Q_value, N, k, totalDigits, sqrtN) {
     // For now, we use a conservative check: if both are already at full length, they must match
     // More sophisticated length tracking could be added, but this is a safety check
     
-    return true;
+    return 0; // Feasible (not pruned)
 }
 
 function checkSolution(branch, N) {
@@ -219,7 +221,7 @@ function checkSolution(branch, N) {
 function workFunction(input) {
     const { k, p_history, q_history, P_value, Q_value, carry_in, N_digits, N, sqrtN } = input;
     
-    if (!N_digits || k < 1 || k > N_digits.length) return [];
+    if (!N_digits || k < 1 || k > N_digits.length) return { states: [], pruningStats: {} };
     if (P_value === undefined || Q_value === undefined || N === undefined || sqrtN === undefined) {
         throw new Error('P_value, Q_value, N (BigInt), and sqrtN (BigInt) are required');
     }
@@ -228,6 +230,19 @@ function workFunction(input) {
     const nextStates = [];
     const isLastDigit = k === N_digits.length;
     const totalDigits = N_digits.length;
+    
+    // Initialize pruning statistics for this workFunction call
+    const pruningStats = {
+        1: 0, // Symmetry Elimination
+        2: 0, // Exact Termination Rule
+        3: 0, // Immediate Overshoot
+        4: 0, // Sqrt-Based Hard Bound
+        5: 0, // Explicit Growth Envelope
+        6: 0, // Minimum Contribution
+        7: 0, // Linear-Term Gap (redundant with 5, but track separately)
+        8: 0, // Upper Tail Tightening
+        9: 0  // Length Split (not implemented, but reserved)
+    };
     
     // #6. Carry Envelope Tightening (Mandatory)
     // Maximum convolution sum is bounded by: maxDigitContribution = 81 * k
@@ -304,7 +319,14 @@ function workFunction(input) {
                     q_history: next_q_history
                 };
                 
-                if (!globalFeasible(newState, new_P_value, new_Q_value, N, digitsProcessed, totalDigits, sqrtN)) {
+                const feasibleResult = globalFeasible(newState, new_P_value, new_Q_value, N, digitsProcessed, totalDigits, sqrtN);
+                if (feasibleResult !== 0 && feasibleResult !== true) {
+                    // Pruned by step feasibleResult
+                    pruningStats[feasibleResult] = (pruningStats[feasibleResult] || 0) + 1;
+                    continue;
+                }
+                if (feasibleResult === false) {
+                    // Should not happen with new return values, but handle for safety
                     continue;
                 }
                 
@@ -326,7 +348,7 @@ function workFunction(input) {
         }
     }
 
-    return nextStates;
+    return { states: nextStates, pruningStats: pruningStats };
 }
 
 /**
@@ -421,14 +443,27 @@ function stepAlgorithm(state) {
     let nodesVisited = state.nodesVisited || 0;
     let nodesPruned = state.nodesPruned || 0;
     
+    // Aggregate pruning statistics
+    const stepPruningStats = {
+        1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0
+    };
+    
     state.frontier.forEach((branch, parentIdx) => {
-        const candidates = workFunction({ 
+        const workResult = workFunction({ 
             ...branch, 
             k: currentK, 
             N_digits: state.N_digits,
             N: state.N_big || BigInt(state.N),
             sqrtN: state.sqrtN
         });
+        
+        const candidates = workResult.states || [];
+        const pruningStats = workResult.pruningStats || {};
+        
+        // Aggregate pruning statistics
+        for (let step = 1; step <= 9; step++) {
+            stepPruningStats[step] = (stepPruningStats[step] || 0) + (pruningStats[step] || 0);
+        }
         
         // #11. Instrumentation: Track visited and pruned nodes
         // Each digit pair (pk, qk) is a candidate node
@@ -438,6 +473,12 @@ function stepAlgorithm(state) {
         
         candidates.forEach(result => allResults.push({ ...result, parentIdx }));
     });
+    
+    // Update cumulative pruning statistics
+    const updatedPruningStats = { ...state.pruningStats };
+    for (let step = 1; step <= 9; step++) {
+        updatedPruningStats[step] = (updatedPruningStats[step] || 0) + stepPruningStats[step];
+    }
 
     // If no valid branches found, terminate
     if (allResults.length === 0) {
@@ -448,7 +489,8 @@ function stepAlgorithm(state) {
             maxActiveBranches: state.maxActiveBranches || 0,
             nodesVisited: nodesVisited,
             nodesPruned: nodesPruned,
-            maxFrontierWidth: state.maxFrontierWidth || 0
+            maxFrontierWidth: state.maxFrontierWidth || 0,
+            pruningStats: updatedPruningStats
         };
     }
 
@@ -480,7 +522,8 @@ function stepAlgorithm(state) {
                     maxActiveBranches: maxActiveBranches,
                     nodesVisited: nodesVisited,
                     nodesPruned: nodesPruned,
-                    maxFrontierWidth: maxFrontierWidth
+                    maxFrontierWidth: maxFrontierWidth,
+                    pruningStats: updatedPruningStats
                 };
             }
         }
@@ -495,7 +538,8 @@ function stepAlgorithm(state) {
             maxActiveBranches: maxActiveBranches,
             nodesVisited: nodesVisited,
             nodesPruned: nodesPruned,
-            maxFrontierWidth: maxFrontierWidth
+            maxFrontierWidth: maxFrontierWidth,
+            pruningStats: updatedPruningStats
         };
     }
 
@@ -519,7 +563,8 @@ function stepAlgorithm(state) {
         maxActiveBranches: maxActiveBranches,
         nodesVisited: nodesVisited,
         nodesPruned: nodesPruned,
-        maxFrontierWidth: maxFrontierWidth
+        maxFrontierWidth: maxFrontierWidth,
+        pruningStats: updatedPruningStats
     };
 }
 
