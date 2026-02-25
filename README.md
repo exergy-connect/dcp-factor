@@ -66,6 +66,51 @@ Each state in the frontier is a compact JSON tuple:
 - **Pruning**: Dead-end branches are immediately recycled
 - **Persistence**: States are stored as discrete tuples, enabling distribution across time and space
 
+## Elastic Scheduler Architecture: The Adaptive Core of Φᵈᶜᵖ
+
+By making $m$ (the look-ahead depth) a scheduler-controlled parameter, the IVI algorithm evolves from a static sequence into an **Elastic Search Web**. This architecture allows the system to balance the "width" of the branch search with the "depth" of local computation, optimizing for the global network's current throughput.
+
+### The Dynamic Feedback Loop
+
+The Elastic Scheduler monitors the **Frontier Density**—the number of active valid branches—to determine the optimal $m$ for the next pulse.
+
+* **Expansion Phase (Small $m$):** Used when the number of active branches is low. By reducing $m$, the scheduler forces more frequent check-ins, allowing the web to "fan out" and discover new adjacent possibilities across more workers.
+* **Pruning Phase (Large $m$):** Used when the frontier becomes too wide. By increasing $m$, the scheduler delegates more "logical work" to the workers. This forces branches to survive a longer mathematical gauntlet before reporting back, naturally pruning the "web" and reducing network congestion.
+
+### Implementation: The Task Payload
+
+The Task Object now includes the `m` parameter, allowing the worker to calibrate its local recursion stack.
+
+**Payload Schema:**
+
+```json
+{
+  "k": 128,              // Current digit position
+  "m": 10,               // Dynamic look-ahead depth
+  "N_digits": [...],     // Target semiprime digits
+  "state": {
+    "p_history": [...],
+    "q_history": [...],
+    "carry_in": 4
+  }
+}
+```
+
+### State Space Compression Table
+
+As $m$ increases, the number of required network round-trips for an RSA-scale number (e.g., 617 digits) drops drastically:
+
+| Look-ahead ($m$) | Network Pulses (Round-trips) | Compute Effort per Worker | Network Overhead |
+| --- | --- | --- | --- |
+| **1** | 617 | Negligible | Critical |
+| **4** | 154 | Low | Moderate |
+| **10** | 62 | Medium | Low |
+| **20** | 31 | High | **Optimal** |
+
+### The "Golden Path" Convergence
+
+The ultimate goal of the Elastic Scheduler is to navigate the **Adjacent Possible** until only the Golden Path remains. By the time the web reaches the MSD (Most Significant Digit), the constraints are so tight that $m$ can be maximized to rapidly close the gap and verify the final carry $c_{n+1}=0$.
+
 ## Implementation
 
 ### Work Function
