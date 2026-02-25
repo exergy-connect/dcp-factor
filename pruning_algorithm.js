@@ -572,5 +572,6 @@ function stepAlgorithm(state) {
     if (typeof window !== 'undefined') {
         window.initializeAlgorithm = initializeAlgorithm;
         window.stepAlgorithm = stepAlgorithm;
+        window.workFunction = workFunction; // Export for DCP workers
     }
 })();
