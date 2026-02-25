@@ -15,6 +15,37 @@
  */
 
 /**
+ * Precomputed lookup table for multiplying two digits (0-9).
+ * Returns an object with {d: result_digit, c: carry_value, p: product}
+ * where d is the ones place, c is the tens place, and p is the full product.
+ * 
+ * @type {Array<Array<{d: number, c: number, p: number}>>}
+ */
+const DIGIT_MULT_TABLE = [
+    [{d: 0, c: 0, p: 0}, {d: 0, c: 0, p: 0}, {d: 0, c: 0, p: 0}, {d: 0, c: 0, p: 0}, {d: 0, c: 0, p: 0}, {d: 0, c: 0, p: 0}, {d: 0, c: 0, p: 0}, {d: 0, c: 0, p: 0}, {d: 0, c: 0, p: 0}, {d: 0, c: 0, p: 0}],
+    [{d: 0, c: 0, p: 0}, {d: 1, c: 0, p: 1}, {d: 2, c: 0, p: 2}, {d: 3, c: 0, p: 3}, {d: 4, c: 0, p: 4}, {d: 5, c: 0, p: 5}, {d: 6, c: 0, p: 6}, {d: 7, c: 0, p: 7}, {d: 8, c: 0, p: 8}, {d: 9, c: 0, p: 9}],
+    [{d: 0, c: 0, p: 0}, {d: 2, c: 0, p: 2}, {d: 4, c: 0, p: 4}, {d: 6, c: 0, p: 6}, {d: 8, c: 0, p: 8}, {d: 0, c: 1, p: 10}, {d: 2, c: 1, p: 12}, {d: 4, c: 1, p: 14}, {d: 6, c: 1, p: 16}, {d: 8, c: 1, p: 18}],
+    [{d: 0, c: 0, p: 0}, {d: 3, c: 0, p: 3}, {d: 6, c: 0, p: 6}, {d: 9, c: 0, p: 9}, {d: 2, c: 1, p: 12}, {d: 5, c: 1, p: 15}, {d: 8, c: 1, p: 18}, {d: 1, c: 2, p: 21}, {d: 4, c: 2, p: 24}, {d: 7, c: 2, p: 27}],
+    [{d: 0, c: 0, p: 0}, {d: 4, c: 0, p: 4}, {d: 8, c: 0, p: 8}, {d: 2, c: 1, p: 12}, {d: 6, c: 1, p: 16}, {d: 0, c: 2, p: 20}, {d: 4, c: 2, p: 24}, {d: 8, c: 2, p: 28}, {d: 2, c: 3, p: 32}, {d: 6, c: 3, p: 36}],
+    [{d: 0, c: 0, p: 0}, {d: 5, c: 0, p: 5}, {d: 0, c: 1, p: 10}, {d: 5, c: 1, p: 15}, {d: 0, c: 2, p: 20}, {d: 5, c: 2, p: 25}, {d: 0, c: 3, p: 30}, {d: 5, c: 3, p: 35}, {d: 0, c: 4, p: 40}, {d: 5, c: 4, p: 45}],
+    [{d: 0, c: 0, p: 0}, {d: 6, c: 0, p: 6}, {d: 2, c: 1, p: 12}, {d: 8, c: 1, p: 18}, {d: 4, c: 2, p: 24}, {d: 0, c: 3, p: 30}, {d: 6, c: 3, p: 36}, {d: 2, c: 4, p: 42}, {d: 8, c: 4, p: 48}, {d: 4, c: 5, p: 54}],
+    [{d: 0, c: 0, p: 0}, {d: 7, c: 0, p: 7}, {d: 4, c: 1, p: 14}, {d: 1, c: 2, p: 21}, {d: 8, c: 2, p: 28}, {d: 5, c: 3, p: 35}, {d: 2, c: 4, p: 42}, {d: 9, c: 4, p: 49}, {d: 6, c: 5, p: 56}, {d: 3, c: 6, p: 63}],
+    [{d: 0, c: 0, p: 0}, {d: 8, c: 0, p: 8}, {d: 6, c: 1, p: 16}, {d: 4, c: 2, p: 24}, {d: 2, c: 3, p: 32}, {d: 0, c: 4, p: 40}, {d: 8, c: 4, p: 48}, {d: 6, c: 5, p: 56}, {d: 4, c: 6, p: 64}, {d: 2, c: 7, p: 72}],
+    [{d: 0, c: 0, p: 0}, {d: 9, c: 0, p: 9}, {d: 8, c: 1, p: 18}, {d: 7, c: 2, p: 27}, {d: 6, c: 3, p: 36}, {d: 5, c: 4, p: 45}, {d: 4, c: 5, p: 54}, {d: 3, c: 6, p: 63}, {d: 2, c: 7, p: 72}, {d: 1, c: 8, p: 81}]
+];
+
+/**
+ * Multiplies two digits using the precomputed lookup table.
+ * 
+ * @param {number} a - First digit (0-9)
+ * @param {number} b - Second digit (0-9)
+ * @returns {number} The product a * b
+ */
+function multiplyDigits(a, b) {
+    return DIGIT_MULT_TABLE[a][b].p;
+}
+
+/**
  * Converts a digit array (LSD-first) to a number.
  * 
  * The digits array represents a number in least-significant-digit-first order.
@@ -124,24 +155,36 @@ function workFunction(input) {
     
     const target_digit = N_digits[k - 1];
     const nextStates = [];
+    const isLastDigit = k === N_digits.length;
+    
+    // Pre-compute base sum for terms i=2 to k-1 (terms that don't involve pk or qk)
+    // These are: p_2*q_{k-1}, p_3*q_{k-2}, ..., p_{k-1}*q_2
+    let baseSum = 0;
+    for (let i = 2; i < k; i++) {
+        const p_idx = i - 1;  // p_i is at index i-1
+        const q_idx = k - i;  // q_{k-i+1} is at index k-i
+        if (p_idx < p_history.length && q_idx >= 0 && q_idx < q_history.length) {
+            baseSum += multiplyDigits(p_history[p_idx], q_history[q_idx]);
+        }
+    }
+    
+    // Pre-compute q_1 (first digit of q, at index 0) for reuse
+    const q1 = q_history.length > 0 ? q_history[0] : 0;
+    // Pre-compute p_1 (first digit of p, at index 0) for reuse
+    const p1 = p_history.length > 0 ? p_history[0] : 0;
 
     // Explore all 100 possible digit pairs (0-9 for each)
     for (let pk = 0; pk <= 9; pk++) {
         for (let qk = 0; qk <= 9; qk++) {
-            const temp_p = [...p_history, pk];
-            const temp_q = [...q_history, qk];
-            
             // Compute sum_{i=1}^{k} p_i * q_{k-i+1}
-            // p_i is at index i-1, q_{k-i+1} is at index k-i
-            let sumOfProducts = 0;
-            for (let i = 1; i <= k; i++) {
-                const p_idx = i - 1;
-                const q_idx = k - i;
-                
-                if (p_idx < temp_p.length && q_idx >= 0 && q_idx < temp_q.length) {
-                    sumOfProducts += temp_p[p_idx] * temp_q[q_idx];
-                }
-            }
+            // For k=1: only p_1 * q_1 = pk * qk
+            // For k>1: 
+            //   - i=1: p_1 * q_k = p1 * qk
+            //   - i=k: p_k * q_1 = pk * q1
+            //   - i=2..k-1: already computed in baseSum
+            const sumOfProducts = k === 1 
+                ? multiplyDigits(pk, qk)
+                : baseSum + multiplyDigits(p1, qk) + multiplyDigits(pk, q1);
 
             const total = sumOfProducts + carry_in;
             const remainder = total - target_digit;
@@ -152,15 +195,58 @@ function workFunction(input) {
                 const carry_out = remainder / 10;
                 // Allow carries 0-10 for intermediate steps
                 // At the last digit, final carry must be 0
-                if (carry_out >= 0 && carry_out <= 10 && (k < N_digits.length || carry_out === 0)) {
+                if (carry_out >= 0 && carry_out <= 10 && (!isLastDigit || carry_out === 0)) {
+                    // Only create arrays if we have a valid state
+                    const lastTwoDigits = `${pk}${qk}`.padStart(2, '0');
+                    const next_p_history = [...p_history, pk];
+                    const next_q_history = [...q_history, qk];
+                    const next_k = k + 1;
+                    
+                    // Compute baseSum for next position (k+1) incrementally from current baseSum
+                    // baseSum(k) = Σ(i=2 to k-1) p_i * q_{k-i+1}
+                    // baseSum(k+1) = Σ(i=2 to k) p_i * q_{k-i+2}
+                    // For each existing term i in [2, k-1]: 
+                    //   - Old: p_i * q_{k-i+1} (q at index k-i)
+                    //   - New: p_i * q_{k-i+2} (q at index k-i+1, which is q_{k-i+1} from old array)
+                    // So we adjust: subtract p_i * q_{old_index}, add p_i * q_{new_index}
+                    // Then add new term: p_k * q_2
+                    let nextBaseSum = 0;
+                    if (next_k > 1) {
+                        if (k === 1) {
+                            // For k=1, baseSum was 0, so nextBaseSum is also 0
+                            nextBaseSum = 0;
+                        } else {
+                            // Start with current baseSum and adjust for shifted q indices
+                            nextBaseSum = baseSum;
+                            // Adjust each existing term: q index shifts from (k-i) to (k-i+1)
+                            for (let i = 2; i < k; i++) {
+                                const p_idx = i - 1;
+                                const old_q_idx = k - i;  // q_{k-i+1} in old array
+                                const new_q_idx = k - i + 1;  // q_{k-i+2} in new array
+                                if (p_idx < p_history.length && 
+                                    old_q_idx >= 0 && old_q_idx < q_history.length &&
+                                    new_q_idx >= 0 && new_q_idx < next_q_history.length) {
+                                    // Subtract old term, add new term
+                                    nextBaseSum -= multiplyDigits(p_history[p_idx], q_history[old_q_idx]);
+                                    nextBaseSum += multiplyDigits(p_history[p_idx], next_q_history[new_q_idx]);
+                                }
+                            }
+                            // Add new term: p_k * q_2 (q_2 is at index 1)
+                            if (next_q_history.length > 1) {
+                                nextBaseSum += multiplyDigits(pk, next_q_history[1]);
+                            }
+                        }
+                    }
+                    
                     nextStates.push({
-                        k: k + 1,
-                        p_history: temp_p,
-                        q_history: temp_q,
+                        k: next_k,
+                        p_history: next_p_history,
+                        q_history: next_q_history,
                         carry_in: carry_out,
+                        baseSum: nextBaseSum,
                         pk: pk,
                         qk: qk,
-                        lastTwoDigits: (pk * 10 + qk).toString().padStart(2, '0')
+                        lastTwoDigits: lastTwoDigits
                     });
                 }
             }
