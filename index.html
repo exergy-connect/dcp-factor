@@ -615,9 +615,15 @@
         function animate() {
             if (!isRunning || !algorithmState) return;
 
+            // Always draw visualization and update info first, even for final step
+            drawVisualization(algorithmState);
+            updateInfo(algorithmState);
+
             if (algorithmState.success) {
-                drawVisualization(algorithmState);
-                stopAnimation(`SUCCESS! Found factors: p = ${algorithmState.foundP}, q = ${algorithmState.foundQ}`, 'success');
+                // Show final step, then display success message after a brief delay
+                setTimeout(() => {
+                    stopAnimation(`SUCCESS! Found factors: p = ${algorithmState.foundP}, q = ${algorithmState.foundQ}`, 'success');
+                }, 1500);
                 return;
             }
 
@@ -625,9 +631,6 @@
                 stopAnimation('Algorithm completed (no factors found)');
                 return;
             }
-
-            drawVisualization(algorithmState);
-            updateInfo(algorithmState);
 
             const pauseCheckbox = document.getElementById('pauseCheckbox');
             if (pauseCheckbox?.checked) {

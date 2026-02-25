@@ -66,6 +66,30 @@ function powerOf10(k) {
 }
 
 /**
+ * Computes integer square root of a BigInt using Newton's method.
+ * Returns floor(sqrt(n)) for n >= 0.
+ * 
+ * @param {bigint} n - Number to compute square root of
+ * @returns {bigint} floor(sqrt(n))
+ */
+function integerSqrt(n) {
+    if (n < 0n) {
+        throw new Error('Square root of negative number');
+    }
+    if (n === 0n) return 0n;
+    if (n === 1n) return 1n;
+    
+    // Newton's method: x_{k+1} = (x_k + n/x_k) / 2
+    let x = n;
+    let prev = 0n;
+    while (x !== prev) {
+        prev = x;
+        x = (x + n / x) / 2n;
+    }
+    return x;
+}
+
+/**
  * Converts a digit array (LSD-first) to a BigInt.
  * 
  * The digits array represents a number in least-significant-digit-first order.
@@ -162,52 +186,58 @@ function comparePartialNumbers(p_history, q_history) {
 /**
  * Global feasibility pruning: checks if a branch can possibly lead to a valid factorization.
  * 
- * Implements multiple pruning strategies:
- * 1. Product bounds checking (Pk*Qk > N, Pmax*Qmax < N)
- * 2. Cross-bounds checking (Pk*Qmax < N, Pmax*Qk > N)
- * 3. Leading digit constraints (reject leading zeros at final position)
- * 4. Residual magnitude pruning
+ * Implements mathematically sound pruning according to specification:
+ * 1. Core product bounding (Pk*Qk > N, Pmax*Qmax < N)
+ * 2. Square root envelope pruning
+ * 3. Exact termination rule (remaining === 0)
+ * 4. Leading digit constraint
+ * 
+ * All arithmetic uses BigInt. No floating point, no heuristics.
  * 
  * @param {Object} state - Current branch state
  * @param {bigint} P_value - Current partial p value as BigInt
  * @param {bigint} Q_value - Current partial q value as BigInt
  * @param {bigint} N - Target number to factorize as BigInt
- * @param {number} k - Current position (1-indexed)
+ * @param {number} k - Number of digits processed (after adding current digits)
  * @param {number} totalDigits - Total number of digits in N
+ * @param {bigint} sqrtN - Precomputed floor(sqrt(N)) as BigInt
  * @returns {boolean} True if branch is globally feasible, false if it should be pruned
  */
-function globalFeasible(state, P_value, Q_value, N, k, totalDigits) {
+function globalFeasible(state, P_value, Q_value, N, k, totalDigits, sqrtN) {
     const remainingDigits = totalDigits - k;
     
-    // If we've processed all digits, check final constraints
-    // Note: k is the number of digits processed (after adding current digits)
-    // So if k === totalDigits, we've processed all digits
-    if (k >= totalDigits) {
-        // At final step, we'll verify P*Q == N in checkSolution
-        // Leading zeros are valid if they represent numbers with fewer digits
-        // (e.g., 0051 = 51 is valid)
-        // Only reject if the actual value is invalid
+    // #4. Exact Termination Rule
+    // If remaining === 0, accept only if Pk * Qk === N
+    // (carry_in === 0 is checked separately in workFunction)
+    if (remainingDigits === 0) {
         // Reject trivial factor 1
         if (P_value <= 1n || Q_value <= 1n) {
             return false;
         }
-        // Reject if product doesn't match (will be checked in checkSolution, but prune obviously wrong ones early)
-        const product = P_value * Q_value;
-        if (product !== N) {
+        
+        // #7. Leading Digit Constraint
+        // Reject branches where highest digit of P or Q is 0
+        // This eliminates invalid fixed-length completions where the number would be 0
+        // Check if the actual value is 0 (all digits are 0) rather than just MSD
+        if (P_value === 0n || Q_value === 0n) {
             return false;
         }
-        return true;
+        
+        // Also reject if MSD is 0 and we have full digit count (invalid leading zero)
+        // But allow if the number is valid (e.g., 07 = 7 is fine if it's not the full count)
+        // Actually, if P_value or Q_value is non-zero, the MSD being 0 just means
+        // the number has fewer digits, which is fine. So we only need to check for actual zero.
+        
+        // Exact product match required
+        const product = P_value * Q_value;
+        return product === N;
     }
     
-    // Pruning check 1: Current product already too large
+    // #3. Core Product Bounding (Mandatory)
+    // Check 1: Current product already too large
     const currentProduct = P_value * Q_value;
     if (currentProduct > N) {
         return false;
-    }
-    
-    // Skip bounds checks when no digits remain (we'll check exact match at final step)
-    if (remainingDigits === 0) {
-        return true;
     }
     
     // Compute maximum possible completions (all remaining digits are 9)
@@ -218,37 +248,24 @@ function globalFeasible(state, P_value, Q_value, N, k, totalDigits) {
     const Pmax = P_value + maxTail * powerK;
     const Qmax = Q_value + maxTail * powerK;
     
-    // Pruning check 2: Maximum possible product too small
+    // Check 2: Maximum possible product too small
     const maxProduct = Pmax * Qmax;
     if (maxProduct < N) {
         return false;
     }
     
-    // Pruning check 3: Cross-bounds - ensure feasible rectangle
-    // These checks are too aggressive because they assume only one variable changes,
-    // but both p and q can be adjusted together. They prune valid solutions.
-    // Disabled for now - the basic bounds checks (Pk*Qk <= N <= Pmax*Qmax) are sufficient.
-    /*
-    const crossProduct1 = P_value * Qmax;
-    if (crossProduct1 < N) {
+    // #5. Square Root Envelope Pruning (Mandatory)
+    // Since valid factorizations satisfy P ≤ sqrt(N) ≤ Q,
+    // prune unreachable regions
+    
+    // If both Pmax and Qmax are below sqrt(N), prune (unreachable lower-left)
+    if (Pmax < sqrtN && Qmax < sqrtN) {
         return false;
     }
     
-    const crossProduct2 = Pmax * Q_value;
-    if (crossProduct2 > N) {
+    // If both Pk and Qk are above sqrt(N), prune (unreachable upper-right)
+    if (P_value > sqrtN && Q_value > sqrtN) {
         return false;
-    }
-    */
-    
-    // Pruning check 4: Residual magnitude
-    // This check ensures the remaining digits can correct the current error
-    // Skip when remainingDigits = 0 (we've processed all digits, will be checked at final step)
-    if (remainingDigits > 0 && currentProduct < N) {
-        const maxRemainingContribution = maxProduct - currentProduct;
-        const residual = N - currentProduct;
-        if (residual > maxRemainingContribution) {
-            return false;
-        }
     }
     
     return true;
@@ -296,18 +313,11 @@ function checkSolution(branch, N) {
  *   - lastTwoDigits: string representation of pk*10 + qk
  */
 function workFunction(input) {
-    const { k, p_history, q_history, P_value, Q_value, carry_in, N_digits, N } = input;
+    const { k, p_history, q_history, P_value, Q_value, carry_in, N_digits, N, sqrtN } = input;
     
     if (!N_digits || k < 1 || k > N_digits.length) return [];
-    if (P_value === undefined || Q_value === undefined || N === undefined) {
-        throw new Error('P_value, Q_value, and N (BigInt) are required');
-    }
-    
-    // Pruning: Ensure p <= q (check early to avoid unnecessary computation)
-    const partialCompare = comparePartialNumbers(p_history, q_history);
-    if (partialCompare > 0) {
-        // p > q already, prune entire branch
-        return [];
+    if (P_value === undefined || Q_value === undefined || N === undefined || sqrtN === undefined) {
+        throw new Error('P_value, Q_value, N (BigInt), and sqrtN (BigInt) are required');
     }
     
     const target_digit = N_digits[k - 1];
@@ -315,9 +325,12 @@ function workFunction(input) {
     const isLastDigit = k === N_digits.length;
     const totalDigits = N_digits.length;
     
-    // Calculate dynamic carry bounds based on maximum possible sum at position k
-    // Maximum contribution: 81 (9*9) per digit pair, k pairs, plus carry_in
-    const maxSum = 81 * k + (carry_in || 0);
+    // #6. Carry Envelope Tightening (Mandatory)
+    // Maximum convolution sum is bounded by: maxDigitContribution = 81 * k
+    // maxSum = maxDigitContribution + carry_in
+    // maxCarryOut = floor(maxSum / 10)
+    const maxDigitContribution = 81 * k;
+    const maxSum = maxDigitContribution + (carry_in || 0);
     const maxCarryOut = Math.floor(maxSum / 10);
     
     // Pre-compute base sum for terms i=2 to k-1 (terms that don't involve pk or qk)
@@ -337,11 +350,8 @@ function workFunction(input) {
     const p1 = p_history.length > 0 ? p_history[0] : 0;
     
     // Explore all possible digit pairs (0-9 for each)
-    // If partial numbers are equal, only iterate pk <= qk
-    // If partial numbers are not equal (p < q), all pairs are valid
     for (let pk = 0; pk <= 9; pk++) {
-        const qkStart = partialCompare === 0 ? pk : 0;
-        for (let qk = qkStart; qk <= 9; qk++) {
+        for (let qk = 0; qk <= 9; qk++) {
             // Compute sum_{i=1}^{k} p_i * q_{k-i+1}
             // For k=1: only p_1 * q_1 = pk * qk
             // For k>1: 
@@ -364,89 +374,87 @@ function workFunction(input) {
             // remainder = 10*c_{k+1}, meaning remainder must be >= 0 and divisible by 10
             if (remainder % 10 === 0) {
                 const carry_out = remainder / 10;
-                // Use dynamic carry bounds
+                // #6. Carry Envelope Tightening: Reject if carry_out > maxCarryOut
                 // At the last digit, final carry must be 0
-                if (carry_out >= 0 && carry_out <= maxCarryOut && (!isLastDigit || carry_out === 0)) {
-                    // Create arrays for new state
-                    const next_p_history = [...p_history, pk];
-                    const next_q_history = [...q_history, qk];
-                    
-                    // Pruning: Verify the new state maintains p <= q before expensive computation
-                    const newStateCompare = comparePartialNumbers(next_p_history, next_q_history);
-                    if (newStateCompare > 0) {
-                        // New state has p > q, skip it
-                        continue;
-                    }
-                    
-                    // Update P_value and Q_value incrementally (avoid rebuilding from scratch)
-                    // k is 1-indexed, so digit at position k goes into 10^(k-1) place
-                    const powerK = powerOf10(k - 1);
-                    const new_P_value = P_value + BigInt(pk) * powerK;
-                    const new_Q_value = Q_value + BigInt(qk) * powerK;
-                    
-                    // Global feasibility pruning: check if branch can lead to valid solution
-                    const newState = {
-                        k: k + 1,
-                        p_history: next_p_history,
-                        q_history: next_q_history
-                    };
-                    
-                    if (!globalFeasible(newState, new_P_value, new_Q_value, N, k, totalDigits)) {
-                        continue;
-                    }
-                    
-                    const lastTwoDigits = `${pk}${qk}`.padStart(2, '0');
-                    const next_k = k + 1;
-                    
-                    // Compute baseSum for next position (k+1) incrementally from current baseSum
-                    // baseSum(k) = Σ(i=2 to k-1) p_i * q_{k-i+1}
-                    // baseSum(k+1) = Σ(i=2 to k) p_i * q_{k-i+2}
-                    // For each existing term i in [2, k-1]: 
-                    //   - Old: p_i * q_{k-i+1} (q at index k-i)
-                    //   - New: p_i * q_{k-i+2} (q at index k-i+1, which is q_{k-i+1} from old array)
-                    // So we adjust: subtract p_i * q_{old_index}, add p_i * q_{new_index}
-                    // Then add new term: p_k * q_2
-                    let nextBaseSum = 0;
-                    if (next_k > 1) {
-                        if (k === 1) {
-                            // For k=1, baseSum was 0, so nextBaseSum is also 0
-                            nextBaseSum = 0;
-                        } else {
-                            // Start with current baseSum and adjust for shifted q indices
-                            nextBaseSum = baseSum;
-                            // Adjust each existing term: q index shifts from (k-i) to (k-i+1)
-                            for (let i = 2; i < k; i++) {
-                                const p_idx = i - 1;
-                                const old_q_idx = k - i;  // q_{k-i+1} in old array
-                                const new_q_idx = k - i + 1;  // q_{k-i+2} in new array
-                                if (p_idx < p_history.length && 
-                                    old_q_idx >= 0 && old_q_idx < q_history.length &&
-                                    new_q_idx >= 0 && new_q_idx < next_q_history.length) {
-                                    // Subtract old term, add new term
-                                    nextBaseSum -= multiplyDigits(p_history[p_idx], q_history[old_q_idx]);
-                                    nextBaseSum += multiplyDigits(p_history[p_idx], next_q_history[new_q_idx]);
-                                }
-                            }
-                            // Add new term: p_k * q_2 (q_2 is at index 1)
-                            if (next_q_history.length > 1) {
-                                nextBaseSum += multiplyDigits(pk, next_q_history[1]);
+                if (carry_out < 0 || carry_out > maxCarryOut || (isLastDigit && carry_out !== 0)) {
+                    continue;
+                }
+                
+                // Create arrays for new state
+                const next_p_history = [...p_history, pk];
+                const next_q_history = [...q_history, qk];
+                
+                // #9. Incremental Value Maintenance
+                // Update P_value and Q_value incrementally (avoid rebuilding from scratch)
+                // k is 1-indexed, so digit at position k goes into 10^(k-1) place
+                const powerK = powerOf10(k - 1);
+                const new_P_value = P_value + BigInt(pk) * powerK;
+                const new_Q_value = Q_value + BigInt(qk) * powerK;
+                
+                // #1. Structural Rule: All pruning in globalFeasible
+                // After adding digit at position k, we have k digits total
+                const digitsProcessed = k;  // k is 1-indexed position, equals number of digits after adding
+                const newState = {
+                    k: digitsProcessed,
+                    p_history: next_p_history,
+                    q_history: next_q_history
+                };
+                
+                if (!globalFeasible(newState, new_P_value, new_Q_value, N, digitsProcessed, totalDigits, sqrtN)) {
+                    continue;
+                }
+                
+                const lastTwoDigits = `${pk}${qk}`.padStart(2, '0');
+                const next_k = k + 1;
+                
+                // Compute baseSum for next position (k+1) incrementally from current baseSum
+                // baseSum(k) = Σ(i=2 to k-1) p_i * q_{k-i+1}
+                // baseSum(k+1) = Σ(i=2 to k) p_i * q_{k-i+2}
+                // For each existing term i in [2, k-1]: 
+                //   - Old: p_i * q_{k-i+1} (q at index k-i)
+                //   - New: p_i * q_{k-i+2} (q at index k-i+1, which is q_{k-i+1} from old array)
+                // So we adjust: subtract p_i * q_{old_index}, add p_i * q_{new_index}
+                // Then add new term: p_k * q_2
+                let nextBaseSum = 0;
+                if (next_k > 1) {
+                    if (k === 1) {
+                        // For k=1, baseSum was 0, so nextBaseSum is also 0
+                        nextBaseSum = 0;
+                    } else {
+                        // Start with current baseSum and adjust for shifted q indices
+                        nextBaseSum = baseSum;
+                        // Adjust each existing term: q index shifts from (k-i) to (k-i+1)
+                        for (let i = 2; i < k; i++) {
+                            const p_idx = i - 1;
+                            const old_q_idx = k - i;  // q_{k-i+1} in old array
+                            const new_q_idx = k - i + 1;  // q_{k-i+2} in new array
+                            if (p_idx < p_history.length && 
+                                old_q_idx >= 0 && old_q_idx < q_history.length &&
+                                new_q_idx >= 0 && new_q_idx < next_q_history.length) {
+                                // Subtract old term, add new term
+                                nextBaseSum -= multiplyDigits(p_history[p_idx], q_history[old_q_idx]);
+                                nextBaseSum += multiplyDigits(p_history[p_idx], next_q_history[new_q_idx]);
                             }
                         }
+                        // Add new term: p_k * q_2 (q_2 is at index 1)
+                        if (next_q_history.length > 1) {
+                            nextBaseSum += multiplyDigits(pk, next_q_history[1]);
+                        }
                     }
-                    
-                    nextStates.push({
-                        k: next_k,
-                        p_history: next_p_history,
-                        q_history: next_q_history,
-                        P_value: new_P_value,
-                        Q_value: new_Q_value,
-                        carry_in: carry_out,
-                        baseSum: nextBaseSum,
-                        pk: pk,
-                        qk: qk,
-                        lastTwoDigits: lastTwoDigits
-                    });
                 }
+                
+                nextStates.push({
+                    k: next_k,
+                    p_history: next_p_history,
+                    q_history: next_q_history,
+                    P_value: new_P_value,
+                    Q_value: new_Q_value,
+                    carry_in: carry_out,
+                    baseSum: nextBaseSum,
+                    pk: pk,
+                    qk: qk,
+                    lastTwoDigits: lastTwoDigits
+                });
             }
         }
     }
@@ -476,11 +484,15 @@ function initializeAlgorithm(p, q) {
     const N_big = BigInt(N);
     const N_digits = N.toString().split('').reverse().map(Number);
     
+    // #5. Square Root Envelope Pruning: Precompute sqrtN once
+    const sqrtN = integerSqrt(N_big);
+    
     return {
         p: p,
         q: q,
         N: N,
         N_big: N_big,
+        sqrtN: sqrtN,
         N_digits: N_digits,
         frontier: [{
             k: 1,
@@ -494,7 +506,11 @@ function initializeAlgorithm(p, q) {
         step: 0,
         history: [],
         activeBranches: 1,
-        maxActiveBranches: 1
+        maxActiveBranches: 1,
+        // #11. Testing Requirements: Instrumentation
+        nodesVisited: 0,
+        nodesPruned: 0,
+        maxFrontierWidth: 1
     };
 }
 
@@ -535,14 +551,25 @@ function stepAlgorithm(state) {
     
     // Process all branches in frontier, tracking parent relationships
     const allResults = [];
+    let nodesVisited = state.nodesVisited || 0;
+    let nodesPruned = state.nodesPruned || 0;
+    
     state.frontier.forEach((branch, parentIdx) => {
-        workFunction({ 
+        const candidates = workFunction({ 
             ...branch, 
             k: currentK, 
             N_digits: state.N_digits,
-            N: state.N_big || BigInt(state.N)
-        })
-            .forEach(result => allResults.push({ ...result, parentIdx }));
+            N: state.N_big || BigInt(state.N),
+            sqrtN: state.sqrtN
+        });
+        
+        // #11. Instrumentation: Track visited and pruned nodes
+        // Each digit pair (pk, qk) is a candidate node
+        // We visit 100 candidates per branch (10*10), but only some pass pruning
+        nodesVisited += 100; // 10*10 digit pairs per branch
+        nodesPruned += (100 - candidates.length);
+        
+        candidates.forEach(result => allResults.push({ ...result, parentIdx }));
     });
 
     // If no valid branches found, terminate
@@ -551,7 +578,10 @@ function stepAlgorithm(state) {
             ...state, 
             done: true,
             activeBranches: 0,
-            maxActiveBranches: state.maxActiveBranches || 0
+            maxActiveBranches: state.maxActiveBranches || 0,
+            nodesVisited: nodesVisited,
+            nodesPruned: nodesPruned,
+            maxFrontierWidth: state.maxFrontierWidth || 0
         };
     }
 
@@ -564,6 +594,7 @@ function stepAlgorithm(state) {
                 const q = branch.Q_value;
                 const activeBranches = allResults.length;
                 const maxActiveBranches = Math.max(state.maxActiveBranches || 0, activeBranches);
+                const maxFrontierWidth = Math.max(state.maxFrontierWidth || 0, activeBranches);
                 
                 return {
                     ...state,
@@ -579,18 +610,25 @@ function stepAlgorithm(state) {
                     foundQ: q.toString(),
                     solutionPath: buildSolutionPath(branch),
                     activeBranches: activeBranches,
-                    maxActiveBranches: maxActiveBranches
+                    maxActiveBranches: maxActiveBranches,
+                    nodesVisited: nodesVisited,
+                    nodesPruned: nodesPruned,
+                    maxFrontierWidth: maxFrontierWidth
                 };
             }
         }
         // No solution found after processing last digit
         const activeBranches = allResults.length;
         const maxActiveBranches = Math.max(state.maxActiveBranches || 0, activeBranches);
+        const maxFrontierWidth = Math.max(state.maxFrontierWidth || 0, activeBranches);
         return { 
             ...state, 
             done: true,
             activeBranches: activeBranches,
-            maxActiveBranches: maxActiveBranches
+            maxActiveBranches: maxActiveBranches,
+            nodesVisited: nodesVisited,
+            nodesPruned: nodesPruned,
+            maxFrontierWidth: maxFrontierWidth
         };
     }
 
@@ -603,6 +641,7 @@ function stepAlgorithm(state) {
 
     const activeBranches = allResults.length;
     const maxActiveBranches = Math.max(state.maxActiveBranches || 0, activeBranches);
+    const maxFrontierWidth = Math.max(state.maxFrontierWidth || 0, activeBranches);
 
     return {
         ...state,
@@ -610,6 +649,9 @@ function stepAlgorithm(state) {
         frontier: allResults,
         history: [...state.history, stepHistory],
         activeBranches: activeBranches,
-        maxActiveBranches: maxActiveBranches
+        maxActiveBranches: maxActiveBranches,
+        nodesVisited: nodesVisited,
+        nodesPruned: nodesPruned,
+        maxFrontierWidth: maxFrontierWidth
     };
 }
