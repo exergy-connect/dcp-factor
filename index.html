@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ΦᴰCᴾ: Interactive Visualization</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e27;
+            height: 100vh;
+            padding: 10px;
+            color: #fff;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(2px 2px at 20% 30%, #fff, transparent),
+                radial-gradient(2px 2px at 60% 70%, #fff, transparent),
+                radial-gradient(1px 1px at 50% 50%, #fff, transparent),
+                radial-gradient(1px 1px at 80% 10%, #fff, transparent),
+                radial-gradient(2px 2px at 90% 80%, #fff, transparent),
+                radial-gradient(1px 1px at 33% 90%, #fff, transparent),
+                radial-gradient(2px 2px at 10% 50%, #fff, transparent),
+                radial-gradient(1px 1px at 70% 20%, #fff, transparent);
+            background-size: 200% 200%;
+            animation: twinkle 20s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 1; }
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 5px;
+            font-size: 2em;
+            text-shadow: 0 0 20px rgba(138, 43, 226, 0.8), 0 0 40px rgba(138, 43, 226, 0.5);
+            background: linear-gradient(135deg, #8a2be2, #00bfff, #9370db);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            flex-shrink: 0;
+        }
+
+        .subtitle {
+            text-align: center;
+            margin-bottom: 10px;
+            opacity: 0.9;
+            font-size: 0.95em;
+            flex-shrink: 0;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(20, 30, 60, 0.6);
+            padding: 8px 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(138, 43, 226, 0.3);
+            box-shadow: 0 0 20px rgba(138, 43, 226, 0.2);
+        }
+
+        label {
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 8px;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        select {
+            padding: 8px 15px;
+            font-size: 1em;
+            border: none;
+            border-radius: 5px;
+            background: white;
+            color: #333;
+            cursor: pointer;
+        }
+
+        button {
+            padding: 8px 20px;
+            font-size: 0.9em;
+            border: none;
+            border-radius: 5px;
+            background: linear-gradient(135deg, #8a2be2, #4b0082);
+            color: white;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 0 15px rgba(138, 43, 226, 0.4);
+        }
+
+        button:hover {
+            background: linear-gradient(135deg, #9370db, #8a2be2);
+            transform: translateY(-2px);
+            box-shadow: 0 0 25px rgba(138, 43, 226, 0.6);
+        }
+
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .info-panel {
+            background: rgba(20, 30, 60, 0.6);
+            padding: 10px 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            backdrop-filter: blur(10px);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            border: 1px solid rgba(138, 43, 226, 0.3);
+            box-shadow: 0 0 20px rgba(138, 43, 226, 0.2);
+            flex-shrink: 0;
+        }
+
+        .info-item {
+            text-align: center;
+        }
+
+        .info-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        .visualization {
+            background: radial-gradient(ellipse at center, rgba(20, 30, 60, 0.8) 0%, rgba(10, 14, 39, 0.95) 100%);
+            border-radius: 15px;
+            padding: 10px;
+            box-shadow: 0 0 40px rgba(138, 43, 226, 0.3), inset 0 0 60px rgba(0, 191, 255, 0.1);
+            position: relative;
+            flex: 1;
+            min-height: 0;
+            border: 1px solid rgba(138, 43, 226, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #canvas {
+            width: 100%;
+            height: 100%;
+            border-radius: 10px;
+        }
+
+        .legend {
+            margin-top: 8px;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid #333;
+        }
+
+        .status {
+            text-align: center;
+            margin-top: 5px;
+            font-size: 1em;
+            font-weight: 600;
+            min-height: 25px;
+            flex-shrink: 0;
+        }
+
+        .success {
+            color: #00ff88;
+            text-shadow: 0 0 20px rgba(0, 255, 136, 0.8);
+        }
+
+        .processing {
+            color: #00bfff;
+            text-shadow: 0 0 20px rgba(0, 191, 255, 0.8);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Φ<span style="font-size: 0.85em; vertical-align: super;">DCP</span></h1>
+        <p class="subtitle">Interactive Visualization of Integer Vector Inversion</p>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="primeP">Prime p:</label>
+                <select id="primeP"></select>
+            </div>
+            <div class="control-group">
+                <label for="primeQ">Prime q:</label>
+                <select id="primeQ"></select>
+            </div>
+            <button id="startBtn" onclick="startVisualization()">Start Factorization</button>
+            <button id="resetBtn" onclick="resetVisualization()">Reset</button>
+            <div class="control-group">
+                <label for="pauseCheckbox">
+                    <input type="checkbox" id="pauseCheckbox">
+                    Pause after each step
+                </label>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <div class="info-item">
+                <div class="info-label">Product N = p × q</div>
+                <div class="info-value" id="productN">-</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Current Position k</div>
+                <div class="info-value" id="currentK">-</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Active Branches</div>
+                <div class="info-value" id="activeBranches">-</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Target Digit</div>
+                <div class="info-value" id="targetDigit">-</div>
+            </div>
+        </div>
+
+        <div class="visualization">
+            <canvas id="canvas"></canvas>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: #8a2be2; box-shadow: 0 0 10px #8a2be2;"></div>
+                <span>Current Target Digit</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #00bfff; box-shadow: 0 0 10px #00bfff;"></div>
+                <span>Valid Branch</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ffd700; box-shadow: 0 0 10px #ffd700;"></div>
+                <span>Golden Path (Solution)</span>
+            </div>
+        </div>
+
+        <div class="status" id="status"></div>
+    </div>
+
+    <script src="algorithm.js"></script>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let algorithmState = null;
+        let isRunning = false;
+        
+        let stars = [];
+        
+        function initStars() {
+            stars = [];
+            const width = canvas.width || canvas.offsetWidth || 800;
+            const height = canvas.height || canvas.offsetHeight || 600;
+            for (let i = 0; i < 100; i++) {
+                stars.push({
+                    x: Math.random() * width,
+                    y: Math.random() * height,
+                    size: Math.random() * 2,
+                    opacity: Math.random()
+                });
+            }
+        }
+
+        function resizeCanvas() {
+            const visualization = canvas.parentElement;
+            canvas.width = visualization.offsetWidth - 20;
+            canvas.height = visualization.offsetHeight - 20;
+            initStars();
+        }
+        
+        setTimeout(() => {
+            resizeCanvas();
+        }, 100);
+        window.addEventListener('resize', resizeCanvas);
+
+        function drawStars() {
+            if (!stars.length) initStars();
+            ctx.fillStyle = '#ffffff';
+            stars.forEach(star => {
+                ctx.globalAlpha = star.opacity;
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+        }
+
+        function drawVisualization(state) {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const baseRadius = 40;
+
+            if (!(state.success && state.solutionPath?.length)) {
+                ctx.fillStyle = '#0a0e27';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawStars();
+            }
+
+            if (state.history.length === 0) {
+                // Initial state with glow
+                const startGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, baseRadius);
+                startGradient.addColorStop(0, '#8a2be2');
+                startGradient.addColorStop(1, '#1a0033');
+                ctx.fillStyle = startGradient;
+                ctx.shadowBlur = 30;
+                ctx.shadowColor = '#8a2be2';
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 24px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('Start', centerX, centerY);
+                return;
+            }
+
+            if (state.success && state.solutionPath?.length) {
+                const maxRadius = Math.min(canvas.width, canvas.height) * 0.4;
+                const numDigits = state.N_digits.length;
+                
+                for (let i = 0; i < numDigits; i++) {
+                    const digitPos = numDigits - 1 - i; // MSB to LSD
+                    const digit = state.N_digits[digitPos];
+                    const step = state.solutionPath[digitPos];
+                    const ringRadius = i === 0 ? 0 : maxRadius * i / (numDigits - 1);
+                    const x = centerX + ringRadius;
+                    const y = centerY;
+                    const radius = i === 0 ? baseRadius : 30;
+                    
+                    // Draw connecting line
+                    if (i > 0) {
+                        const prevRadius = i === 1 ? 0 : maxRadius * (i - 1) / (numDigits - 1);
+                        const prevX = centerX + prevRadius;
+                        const gradient = ctx.createLinearGradient(prevX, y, x, y);
+                        gradient.addColorStop(0, 'rgba(255, 215, 0, 0.6)');
+                        gradient.addColorStop(1, 'rgba(255, 215, 0, 0.8)');
+                        ctx.strokeStyle = gradient;
+                        ctx.lineWidth = 2;
+                        ctx.shadowBlur = 8;
+                        ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
+                        ctx.beginPath();
+                        ctx.moveTo(prevX, y);
+                        ctx.lineTo(x, y);
+                        ctx.stroke();
+                        ctx.shadowBlur = 0;
+                    }
+                    
+                    // Draw golden circle
+                    const circleGradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+                    circleGradient.addColorStop(0, '#ffd700');
+                    circleGradient.addColorStop(0.5, '#ffed4e');
+                    circleGradient.addColorStop(1, '#daa520');
+                    ctx.fillStyle = circleGradient;
+                    ctx.shadowBlur = 30;
+                    ctx.shadowColor = '#ffd700';
+                    ctx.beginPath();
+                    ctx.arc(x, y, radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#ffd700';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                    
+                    // Draw digit and (p,q)
+                    ctx.fillStyle = '#4b0082';
+                    ctx.font = 'bold 28px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(digit.toString(), x, y - 10);
+                    if (step) {
+                        ctx.font = '14px Arial';
+                        ctx.fillText(`(${step.pk},${step.qk})`, x, y + 12);
+                    }
+                }
+                return;
+            }
+
+            const currentStepData = state.history[state.history.length - 1];
+            const { k, target_digit: targetDigit, branches } = currentStepData;
+
+            const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, baseRadius);
+            gradient.addColorStop(0, '#8a2be2');
+            gradient.addColorStop(0.5, '#4b0082');
+            gradient.addColorStop(1, '#1a0033');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 30;
+            ctx.shadowColor = '#8a2be2';
+            ctx.strokeStyle = '#9370db';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Draw target digit
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 28px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(targetDigit.toString(), centerX, centerY - 8);
+            ctx.font = '14px Arial';
+            ctx.fillText(`k=${k}`, centerX, centerY + 12);
+
+            const branchRadius = 30;
+            const maxRadius = Math.min(canvas.width, canvas.height) * 0.4;
+            const numRings = state.N_digits.length - 1;
+            
+            function getBranchPosition(kValue, branchIndex, numBranches) {
+                const ringRadius = kValue === 1 ? 0 : maxRadius * (kValue - 1) / numRings;
+                const angle = (Math.PI * 2 * branchIndex) / Math.max(numBranches, 1);
+                return {
+                    x: centerX + Math.cos(angle) * ringRadius,
+                    y: centerY + Math.sin(angle) * ringRadius
+                };
+            }
+            
+            function drawLine(fromX, fromY, toX, toY, isSolution) {
+                const gradient = ctx.createLinearGradient(fromX, fromY, toX, toY);
+                if (isSolution) {
+                    gradient.addColorStop(0, 'rgba(255, 215, 0, 0.6)');
+                    gradient.addColorStop(1, 'rgba(255, 215, 0, 0.8)');
+                } else {
+                    gradient.addColorStop(0, 'rgba(0, 191, 255, 0.2)');
+                    gradient.addColorStop(1, 'rgba(0, 191, 255, 0.4)');
+                }
+                ctx.strokeStyle = gradient;
+                ctx.lineWidth = isSolution ? 2 : 1;
+                ctx.shadowBlur = isSolution ? 8 : 3;
+                ctx.shadowColor = isSolution ? 'rgba(255, 215, 0, 0.6)' : 'rgba(0, 191, 255, 0.3)';
+                ctx.beginPath();
+                ctx.moveTo(fromX, fromY);
+                ctx.lineTo(toX, toY);
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            }
+            
+            // Draw connecting lines
+            if (k > 1) {
+                branches.forEach((branch, index) => {
+                    if (k === 2 && state.history.length === 1) {
+                        // Connect from center to first ring
+                        const childPos = getBranchPosition(2, index, branches.length);
+                        drawLine(centerX, centerY, childPos.x, childPos.y, branch.isSolution);
+                    } else if (state.history.length > 1 && branch.parentIdx !== null) {
+                        const prevStep = state.history[state.history.length - 2];
+                        const prevK = prevStep.k;
+                        if (prevK > 1) {
+                            const parentPos = getBranchPosition(prevK, branch.parentIdx, prevStep.branches.length);
+                            const childPos = getBranchPosition(k, index, branches.length);
+                            drawLine(parentPos.x, parentPos.y, childPos.x, childPos.y, branch.isSolution);
+                        }
+                    }
+                });
+            }
+            
+            // Draw branch circles
+            if (k > 1) {
+                branches.forEach((branch, index) => {
+                    const {x, y} = getBranchPosition(k, index, branches.length);
+                    const isSolution = branch.isSolution;
+                    const isFinal = branch.carry === 0 && k === state.N_digits.length;
+                    
+                    // Set gradient colors
+                    const gradient = ctx.createRadialGradient(x, y, 0, x, y, branchRadius);
+                    if (isSolution) {
+                        gradient.addColorStop(0, '#ffd700');
+                        gradient.addColorStop(0.5, '#ffed4e');
+                        gradient.addColorStop(1, '#daa520');
+                    } else if (isFinal) {
+                        gradient.addColorStop(0, '#00ff88');
+                        gradient.addColorStop(1, '#00aa55');
+                    } else {
+                        gradient.addColorStop(0, '#00bfff');
+                        gradient.addColorStop(1, '#0066aa');
+                    }
+                    
+                    ctx.fillStyle = gradient;
+                    ctx.shadowBlur = isSolution ? 30 : 20;
+                    ctx.shadowColor = isSolution ? '#ffd700' : (isFinal ? '#00ff88' : '#00bfff');
+                    ctx.beginPath();
+                    ctx.arc(x, y, branchRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = isSolution ? '#ffd700' : '#9370db';
+                    ctx.lineWidth = isSolution ? 3 : 2;
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                    
+                    // Draw text
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 16px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(branch.lastTwoDigits, x, y - 6);
+                    ctx.font = '12px Arial';
+                    ctx.fillText(`${branch.pk},${branch.qk}`, x, y + 10);
+                });
+            }
+
+            state.history.slice(0, -1).forEach(stepData => {
+                if (stepData.k <= 1) return;
+                stepData.branches.forEach((branch, index) => {
+                    const {x, y} = getBranchPosition(stepData.k, index, stepData.branches.length);
+                    const isSolution = branch.isSolution;
+                    ctx.fillStyle = isSolution ? 'rgba(255, 215, 0, 0.6)' : 'rgba(0, 191, 255, 0.2)';
+                    ctx.shadowBlur = isSolution ? 15 : 10;
+                    ctx.shadowColor = isSolution ? 'rgba(255, 215, 0, 0.8)' : 'rgba(0, 191, 255, 0.5)';
+                    ctx.beginPath();
+                    ctx.arc(x, y, isSolution ? 18 : 15, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                });
+            });
+        }
+
+        function updateInfo(state) {
+            document.getElementById('productN').textContent = state.N;
+            if (state.history.length > 0) {
+                const current = state.history[state.history.length - 1];
+                document.getElementById('currentK').textContent = current.k;
+                document.getElementById('activeBranches').textContent = current.branches.length;
+                document.getElementById('targetDigit').textContent = current.target_digit;
+            } else {
+                document.getElementById('currentK').textContent = '0';
+                document.getElementById('activeBranches').textContent = '1';
+                document.getElementById('targetDigit').textContent = '-';
+            }
+        }
+
+        function stopAnimation(message, className = '') {
+            isRunning = false;
+            const startBtn = document.getElementById('startBtn');
+            startBtn.textContent = 'Start Factorization';
+            startBtn.disabled = false;
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = className ? `status ${className}` : 'status';
+        }
+
+        function animate() {
+            if (!isRunning || !algorithmState) return;
+
+            if (algorithmState.success) {
+                drawVisualization(algorithmState);
+                stopAnimation(`SUCCESS! Found factors: p = ${algorithmState.foundP}, q = ${algorithmState.foundQ}`, 'success');
+                return;
+            }
+
+            if (algorithmState.done) {
+                stopAnimation('Algorithm completed (no factors found)');
+                return;
+            }
+
+            drawVisualization(algorithmState);
+            updateInfo(algorithmState);
+
+            const pauseCheckbox = document.getElementById('pauseCheckbox');
+            if (pauseCheckbox?.checked) {
+                isRunning = false;
+                const startBtn = document.getElementById('startBtn');
+                startBtn.textContent = 'Continue';
+                startBtn.disabled = false;
+            } else {
+                setTimeout(() => {
+                    algorithmState = stepAlgorithm(algorithmState);
+                    animate();
+                }, 1500);
+            }
+        }
+
+        function startVisualization() {
+            const startBtn = document.getElementById('startBtn');
+            
+            if (algorithmState && !algorithmState.success && !algorithmState.done) {
+                isRunning = true;
+                startBtn.disabled = true;
+                startBtn.textContent = 'Running...';
+                setTimeout(() => {
+                    algorithmState = stepAlgorithm(algorithmState);
+                    animate();
+                }, 100);
+                return;
+            }
+            
+            const p = parseInt(document.getElementById('primeP').value);
+            const q = parseInt(document.getElementById('primeQ').value);
+
+            if (p === q) {
+                alert('Please select different primes for p and q');
+                return;
+            }
+
+            isRunning = true;
+            algorithmState = initializeAlgorithm(p, q);
+            const status = document.getElementById('status');
+            status.textContent = 'Starting factorization...';
+            status.className = 'status processing';
+            startBtn.disabled = true;
+            startBtn.textContent = 'Running...';
+
+            drawVisualization(algorithmState);
+            updateInfo(algorithmState);
+
+            setTimeout(() => {
+                algorithmState = stepAlgorithm(algorithmState);
+                animate();
+            }, 1000);
+        }
+
+        function resetVisualization() {
+            isRunning = false;
+            algorithmState = null;
+            document.getElementById('status').textContent = '';
+            const startBtn = document.getElementById('startBtn');
+            startBtn.disabled = false;
+            startBtn.textContent = 'Start Factorization';
+            drawVisualization({ history: [] });
+            ['productN', 'currentK', 'activeBranches', 'targetDigit'].forEach(id => {
+                document.getElementById(id).textContent = '-';
+            });
+        }
+
+        function generatePrimes(max) {
+            const sieve = new Array(max + 1).fill(true);
+            sieve[0] = sieve[1] = false;
+            
+            for (let i = 2; i * i <= max; i++) {
+                if (sieve[i]) {
+                    for (let j = i * i; j <= max; j += i) {
+                        sieve[j] = false;
+                    }
+                }
+            }
+            
+            return sieve.map((isPrime, num) => isPrime ? num : null).filter(n => n !== null);
+        }
+        
+        function populatePrimeDropdowns() {
+            const primes = generatePrimes(200);
+            const selectP = document.getElementById('primeP');
+            const selectQ = document.getElementById('primeQ');
+            
+            primes.forEach(prime => {
+                [selectP, selectQ].forEach(select => {
+                    const option = document.createElement('option');
+                    option.value = option.textContent = prime;
+                    select.appendChild(option);
+                });
+            });
+            
+            selectP.value = '53';
+            selectQ.value = '59';
+        }
+        
+        populatePrimeDropdowns();
+    </script>
+</body>
+</html>
