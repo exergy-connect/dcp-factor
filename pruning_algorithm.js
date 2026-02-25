@@ -14,6 +14,9 @@
  * @module pruning_algorithm
  */
 
+(function() {
+    'use strict';
+
 /**
  * Compares two partial numbers represented as LSD-first digit arrays.
  * Returns: -1 if p < q, 0 if p == q, 1 if p > q
@@ -557,8 +560,9 @@ function stepAlgorithm(state) {
     };
 }
 
-// Export functions to window for browser use
-if (typeof window !== 'undefined') {
-    window.initializeAlgorithm = initializeAlgorithm;
-    window.stepAlgorithm = stepAlgorithm;
-}
+    // Export functions to window for browser use
+    if (typeof window !== 'undefined') {
+        window.initializeAlgorithm = initializeAlgorithm;
+        window.stepAlgorithm = stepAlgorithm;
+    }
+})();

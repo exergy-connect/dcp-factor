@@ -9,6 +9,9 @@
  * @module basic_algorithm
  */
 
+(function() {
+    'use strict';
+
 /**
  * Basic work function - only enforces IVI constraint, no pruning
  */
@@ -248,8 +251,9 @@ function stepAlgorithm(state) {
     };
 }
 
-// Export functions to window for browser use
-if (typeof window !== 'undefined') {
-    window.initializeAlgorithm = initializeAlgorithm;
-    window.stepAlgorithm = stepAlgorithm;
-}
+    // Export functions to window for browser use
+    if (typeof window !== 'undefined') {
+        window.initializeAlgorithm = initializeAlgorithm;
+        window.stepAlgorithm = stepAlgorithm;
+    }
+})();

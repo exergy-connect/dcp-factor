@@ -346,11 +346,15 @@
         function loadAlgorithm(algorithmName) {
             return ensureCommonLoaded().then(() => {
                 return new Promise((resolve, reject) => {
-                    // Remove old script if exists
+                    // Remove old script if exists and clear old functions
                     const oldScript = document.getElementById('algorithmScript');
                     if (oldScript) {
                         oldScript.remove();
                     }
+                    
+                    // Clear old algorithm functions from window to avoid conflicts
+                    delete window.initializeAlgorithm;
+                    delete window.stepAlgorithm;
                     
                     const script = document.createElement('script');
                     script.id = 'algorithmScript';
