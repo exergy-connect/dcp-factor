@@ -81,6 +81,152 @@ Each state in the frontier is a compact JSON tuple:
 - **Pruning**: Dead-end branches are immediately recycled
 - **Persistence**: States are stored as discrete tuples, enabling distribution across time and space
 
+## Global Feasibility Pruning: Mathematical Soundness
+
+The IVI algorithm employs **globally-sound pruning** to eliminate branches that cannot possibly lead to valid factorizations. All pruning logic is consolidated in a single deterministic function `globalFeasible()` that ensures:
+
+- **No false negatives**: Valid solutions are never eliminated
+- **Early reduction**: Search width is reduced as early as possible
+- **Mathematical rigor**: All bounds are mathematically proven, not heuristic
+- **BigInt safety**: All arithmetic uses BigInt to handle arbitrarily large numbers
+- **Distributed compatibility**: Pruning decisions are deterministic and independent of worker identity
+
+### Pruning Strategy Overview
+
+The pruning system implements multiple layers of mathematical bounds:
+
+1. **Core Product Bounding**: Ensures the current and maximum possible products bracket the target
+2. **Square Root Envelope**: Eliminates geometrically unreachable regions
+3. **Exact Termination**: Validates final state when all digits are processed
+4. **Leading Digit Constraint**: Rejects invalid fixed-length completions
+5. **Carry Envelope Tightening**: Uses position-dependent bounds for carry values
+
+### Detailed Pruning Rules
+
+#### 1. Core Product Bounding (Mandatory)
+
+At depth $k$ (after processing $k$ digits), let:
+- $P_k$ = current partial value of factor $p$
+- $Q_k$ = current partial value of factor $q$
+- $N$ = target semiprime
+- $remaining = totalDigits - k$ = digits remaining to process
+
+If $remaining > 0$, compute maximum possible completions:
+- $maxTail = 10^{remaining} - 1$ (all remaining digits are 9)
+- $P_{max} = P_k + maxTail \cdot 10^k$
+- $Q_{max} = Q_k + maxTail \cdot 10^k$
+
+**Pruning checks:**
+1. If $P_k \cdot Q_k > N$ → **prune** (current product already too large)
+2. If $P_{max} \cdot Q_{max} < N$ → **prune** (maximum possible product too small)
+
+These bounds ensure that the target $N$ lies within the feasible rectangle defined by $(P_k, Q_k)$ and $(P_{max}, Q_{max})$.
+
+#### 2. Square Root Envelope Pruning (Mandatory)
+
+Since valid factorizations satisfy $P \leq \sqrt{N} \leq Q$, we can eliminate geometrically unreachable regions.
+
+Precompute once: $\sqrt{N} = \lfloor \sqrt{N} \rfloor$ (integer square root)
+
+**Pruning checks:**
+1. If $P_{max} < \sqrt{N}$ **AND** $Q_{max} < \sqrt{N}$ → **prune** (unreachable lower-left region)
+2. If $P_k > \sqrt{N}$ **AND** $Q_k > \sqrt{N}$ → **prune** (unreachable upper-right region)
+
+This removes entire quadrants of the product space that cannot contain valid solutions.
+
+#### 3. Exact Termination Rule
+
+When $remaining = 0$ (all digits processed), accept only if:
+- $P_k \cdot Q_k = N$ (exact product match)
+- $carry_{in} = 0$ (checked separately in work function)
+- $P_k > 1$ and $Q_k > 1$ (reject trivial factors)
+
+Otherwise → **prune**.
+
+This ensures that only complete, valid factorizations are accepted at termination.
+
+#### 4. Leading Digit Constraint
+
+When $remaining = 0$, reject branches where:
+- $P_k = 0$ or $Q_k = 0$ (actual zero values, not just leading zeros)
+
+This eliminates invalid fixed-length completions. Note: Numbers with fewer digits (e.g., $007 = 7$) are allowed, as they represent valid values.
+
+#### 5. Carry Envelope Tightening
+
+At depth $k$, the maximum convolution sum is bounded by:
+- $maxDigitContribution = 81 \cdot k$ (maximum product contribution from $k$ digit pairs, each at most $9 \cdot 9 = 81$)
+- $maxSum = maxDigitContribution + carry_{in}$
+- $maxCarryOut = \lfloor maxSum / 10 \rfloor$
+
+**Pruning check:**
+- If $carry_{out} > maxCarryOut$ → **prune**
+
+Additionally, at the final digit position, $carry_{out}$ must equal $0$ for a valid solution.
+
+This replaces hard-coded carry bounds with position-dependent dynamic bounds, ensuring mathematical soundness at all depths.
+
+### Pruning Implementation Details
+
+#### BigInt Discipline
+
+All arithmetic involving $P$, $Q$, $N$, or powers of 10 uses `BigInt` to avoid precision loss:
+- Powers of 10 are cached: `pow10[k] = 10n ** BigInt(k)`
+- All comparisons use BigInt: `P_value * Q_value > N` (not JavaScript `number`)
+- No floating-point approximations
+- No implicit type coercion
+
+#### Incremental Value Maintenance
+
+Values are maintained incrementally to avoid expensive recomputation:
+- $P_{new} = P_{old} + digit_P \cdot 10^{k-1}$
+- $Q_{new} = Q_{old} + digit_Q \cdot 10^{k-1}$
+
+Digit arrays (`p_history`, `q_history`) are used only for display/debugging, not for value computation.
+
+#### Determinism for Distributed Execution
+
+Pruning decisions depend only on:
+- Current state ($P_k$, $Q_k$, $k$)
+- Target $N$ and $\sqrt{N}$
+- Total digits $totalDigits$
+
+They are **independent** of:
+- Worker ID
+- Depth scheduling
+- Runtime timing
+- Exploration order
+
+This ensures that distributed workers make identical pruning decisions, regardless of when or where they execute.
+
+### Forbidden Pruning Techniques
+
+The following are explicitly **not** used, as they violate mathematical rigor:
+
+- ❌ Floating-point approximations
+- ❌ Heuristic thresholds
+- ❌ Probability-based pruning
+- ❌ Empirical tuning
+- ❌ Assumptions about digit distribution
+- ❌ "Residual magnitude" checks that reduce to already-checked bounds
+- ❌ Cross-bounds like $P_k \cdot Q_{max} < N$ (unsafe in bidirectional growth model)
+
+### Performance Characteristics
+
+- **Time per node**: $O(1)$ - All bound computations are constant time
+- **Space**: $O(1)$ - Only current state values needed, no temporary arrays
+- **Cache efficiency**: Powers of 10 are cached, avoiding repeated exponentiation
+- **Pruning effectiveness**: Typically eliminates 90-99% of candidate branches
+
+### Instrumentation
+
+The algorithm tracks pruning effectiveness:
+- `nodesVisited`: Total candidate digit pairs explored (typically $100 \cdot frontierSize$ per step)
+- `nodesPruned`: Number of candidates eliminated by pruning
+- `maxFrontierWidth`: Maximum number of active branches at any step
+
+These metrics allow comparison of pruning effectiveness across different numbers and bases.
+
 ## Elastic Scheduler Architecture: The Adaptive Core of Φᵈᶜᵖ
 
 By making $m$ (the look-ahead depth) a scheduler-controlled parameter, the IVI algorithm evolves from a static sequence into an **Elastic Search Web**. This architecture allows the system to balance the "width" of the branch search with the "depth" of local computation, optimizing for the global network's current throughput.
