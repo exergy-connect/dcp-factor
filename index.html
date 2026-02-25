@@ -254,6 +254,13 @@
                 <label for="primeQ">Prime q:</label>
                 <select id="primeQ"></select>
             </div>
+            <div class="control-group">
+                <label for="algorithmSelect">Algorithm:</label>
+                <select id="algorithmSelect">
+                    <option value="basic">Basic (No Pruning)</option>
+                    <option value="pruning" selected>Pruning (Global Feasibility)</option>
+                </select>
+            </div>
             <button id="startBtn" onclick="startVisualization()">Start Factorization</button>
             <button id="resetBtn" onclick="resetVisualization()">Reset</button>
             <div class="control-group">
@@ -309,7 +316,65 @@
         <div class="status" id="status"></div>
     </div>
 
-    <script src="algorithm.js"></script>
+    <script src="common.js"></script>
+    <script>
+        // Algorithm loader - dynamically loads the selected algorithm
+        let currentAlgorithm = null;
+        let initializeAlgorithm, stepAlgorithm;
+        let commonLoaded = false;
+        
+        // Ensure common.js is loaded first
+        function ensureCommonLoaded() {
+            return new Promise((resolve, reject) => {
+                if (typeof multiplyDigits === 'function' && typeof powerOf10 === 'function') {
+                    commonLoaded = true;
+                    resolve();
+                } else {
+                    // Wait a bit for common.js to load
+                    setTimeout(() => {
+                        if (typeof multiplyDigits === 'function' && typeof powerOf10 === 'function') {
+                            commonLoaded = true;
+                            resolve();
+                        } else {
+                            reject(new Error('common.js failed to load'));
+                        }
+                    }, 100);
+                }
+            });
+        }
+        
+        function loadAlgorithm(algorithmName) {
+            return ensureCommonLoaded().then(() => {
+                return new Promise((resolve, reject) => {
+                    // Remove old script if exists
+                    const oldScript = document.getElementById('algorithmScript');
+                    if (oldScript) {
+                        oldScript.remove();
+                    }
+                    
+                    const script = document.createElement('script');
+                    script.id = 'algorithmScript';
+                    script.src = algorithmName === 'basic' ? 'basic_algorithm.js' : 'pruning_algorithm.js';
+                    script.onload = () => {
+                        // Functions should be available globally
+                        if (typeof window.initializeAlgorithm === 'function' && typeof window.stepAlgorithm === 'function') {
+                            initializeAlgorithm = window.initializeAlgorithm;
+                            stepAlgorithm = window.stepAlgorithm;
+                            currentAlgorithm = algorithmName;
+                            resolve();
+                        } else {
+                            reject(new Error('Algorithm functions not found'));
+                        }
+                    };
+                    script.onerror = () => reject(new Error('Failed to load algorithm'));
+                    document.head.appendChild(script);
+                });
+            });
+        }
+        
+        // Load default algorithm
+        loadAlgorithm('pruning').catch(err => console.error('Failed to load algorithm:', err));
+    </script>
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
@@ -646,8 +711,26 @@
             }
         }
 
-        function startVisualization() {
+        async function startVisualization() {
             const startBtn = document.getElementById('startBtn');
+            const algorithmSelect = document.getElementById('algorithmSelect');
+            const selectedAlgorithm = algorithmSelect.value;
+            
+            // Load algorithm if changed
+            if (currentAlgorithm !== selectedAlgorithm) {
+                startBtn.disabled = true;
+                startBtn.textContent = 'Loading algorithm...';
+                try {
+                    await loadAlgorithm(selectedAlgorithm);
+                    // Reset state when switching algorithms
+                    algorithmState = null;
+                } catch (err) {
+                    alert('Failed to load algorithm: ' + err.message);
+                    startBtn.disabled = false;
+                    startBtn.textContent = 'Start Factorization';
+                    return;
+                }
+            }
             
             if (algorithmState && !algorithmState.success && !algorithmState.done) {
                 isRunning = true;
