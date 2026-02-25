@@ -1,10 +1,10 @@
-# Φ^DCP: Factoring the Universe through the Web of the Adjacent Possible
+# Φᵈᶜᵖ: Factoring the Universe through the Web of the Adjacent Possible
 
-**Φ^DCP** (Phi-DCP) is a revolutionary approach to integer factorization that combines **Integer Vector Inversion (IVI)** with the **Distributive Compute Protocol (DCP)** to achieve linear-time factorization of semiprimes through decentralized computation.
+**Φᵈᶜᵖ** (Phi-DCP) is a revolutionary approach to integer factorization that combines **Integer Vector Inversion (IVI)** with the **Distributive Compute Protocol (DCP)** to achieve linear-time factorization of semiprimes through decentralized computation.
 
 ## Overview
 
-Traditional factorization methods like the General Number Field Sieve (GNFS) require massive computational resources and sub-exponential time. Φ^DCP transforms this problem by:
+Traditional factorization methods like the General Number Field Sieve (GNFS) require massive computational resources and sub-exponential time. Φᵈᶜᵖ transforms this problem by:
 
 1. **Reframing factorization as digit propagation** - Instead of searching the exponential space of possible primes, we solve one digit at a time from least to most significant
 2. **Distributing across a global network** - Each digit position becomes a "ring" in an expanding web, processed by idle processors worldwide
@@ -129,7 +129,7 @@ function workFunction(input) {
 
 ## Paradigm Shift
 
-| Feature | Traditional (GNFS) | Φ^DCP (IVI + DCP) |
+| Feature | Traditional (GNFS) | Φᵈᶜᵖ (IVI + DCP) |
 |---------|-------------------|-------------------|
 | **Logic** | Global Search | Local Digit Propagation |
 | **Complexity** | Sub-exponential | Linear $O(n)$ |
@@ -141,7 +141,7 @@ function workFunction(input) {
 For detailed mathematical foundations and proofs, see:
 
 - Gerck, E. (2026). "IVI: Integer Vector Inversion by Diophantine Digit Propagation." Planalto Research.
-- van Bemmel, J. (2026). "Φ^DCP: Factoring the Universe through the Web of the Adjacent Possible." Exergy ∞ LLC.
+- van Bemmel, J. (2026). "Φᵈᶜᵖ: Factoring the Universe through the Web of the Adjacent Possible." Exergy ∞ LLC.
 
 ## License
 
