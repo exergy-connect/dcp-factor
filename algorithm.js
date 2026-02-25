@@ -173,9 +173,9 @@ function workFunction(input) {
     // Pre-compute p_1 (first digit of p, at index 0) for reuse
     const p1 = p_history.length > 0 ? p_history[0] : 0;
 
-    // Explore all 100 possible digit pairs (0-9 for each)
+    // Explore all possible digit pairs (0-9 for each), only iterate pk <= qk
     for (let pk = 0; pk <= 9; pk++) {
-        for (let qk = 0; qk <= 9; qk++) {
+        for (let qk = pk; qk <= 9; qk++) {
             // Compute sum_{i=1}^{k} p_i * q_{k-i+1}
             // For k=1: only p_1 * q_1 = pk * qk
             // For k>1: 
