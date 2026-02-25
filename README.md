@@ -35,13 +35,28 @@ DCP enables the distribution of IVI computation across a global network of idle 
 
 Inspired by Stuart Kauffman's biological theory, the "Adjacent Possible" describes all states reachable from the current configuration. At each digit $k$, the universe expands into ~50 potential futures. Most are mathematical dead ends, but one path—the **Golden Path**—maintains perfect carry equilibrium until the final digit.
 
+### Base Selection
+
+The IVI algorithm can operate in any base $b \geq 2$. The choice of base significantly impacts performance:
+
+- **Fewer digits**: Higher bases (e.g., base 16) reduce the number of digit positions, potentially decreasing total computation
+- **Branching factor**: The number of valid digit pairs per position varies with base, affecting the search space width
+- **Optimal base**: The ideal base depends on the specific number being factored—there's no universal "best" base
+
+**Trade-offs:**
+- **Base 8**: Often good for smaller numbers, can reduce branching in some cases
+- **Base 10**: Natural for human-readable results, balanced performance
+- **Base 16**: Fewer digits for large numbers, but higher branching per position (up to 256 pairs vs 100 in base 10)
+
+The algorithm adapts the IVI constraint to any base: $\sum_{i=1}^{k} p_i q_{k-i+1} + c_k = n_k + b \cdot c_{k+1}$, where carries propagate in base $b$.
+
 ## How It Works
 
 ### The Expanding Web
 
 1. **Initialization**: Start with digit position $k=1$ (least significant digit), empty histories, and zero carry
-2. **Expansion**: For each position $k$, workers explore all 100 possible digit pairs $(p_k, q_k)$
-3. **Filtering**: Only pairs satisfying the IVI constraint are kept (typically ≤50 per position)
+2. **Expansion**: For each position $k$, workers explore all $b^2$ possible digit pairs $(p_k, q_k)$ where $b$ is the chosen base (e.g., 100 pairs for base 10, 256 for base 16)
+3. **Filtering**: Only pairs satisfying the IVI constraint are kept (typically ≤50 per position in base 10)
 4. **Propagation**: Valid states become the frontier for position $k+1$
 5. **Pruning**: Branches that reach impossible states are automatically discarded
 6. **Termination**: The Golden Path is found when $k > n$ and final carry $c_{n+1} = 0$
@@ -115,7 +130,9 @@ The ultimate goal of the Elastic Scheduler is to navigate the **Adjacent Possibl
 
 ### Work Function
 
-The core work function runs in each DCP worker sandbox:
+The core work function runs in each DCP worker sandbox. The example below shows base-10 implementation; the algorithm can be adapted for any base $b$ by:
+- Changing the digit range from `0..9` to `0..(b-1)`
+- Replacing `% 10` and `/ 10` with `% b` and `/ b` in the IVI constraint
 
 ```javascript
 function workFunction(input) {
@@ -123,7 +140,7 @@ function workFunction(input) {
   const target_digit = N_digits[k - 1];
   const nextStates = [];
 
-  // Explore all 100 possible digit pairs
+  // Explore all 100 possible digit pairs (for base 10)
   for (let pk = 0; pk <= 9; pk++) {
     for (let qk = 0; qk <= 9; qk++) {
       // Calculate sum of products for position k
@@ -139,6 +156,7 @@ function workFunction(input) {
       const total = sumOfProducts + carry_in;
 
       // IVI Constraint: Does this pair satisfy the target digit?
+      // For base b: total % b === target_digit, carry_out = Math.floor(total / b)
       if (total % 10 === target_digit) {
         const carry_out = Math.floor(total / 10);
         nextStates.push({

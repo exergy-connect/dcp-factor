@@ -278,6 +278,10 @@
                 <div class="info-value" id="activeBranches">-</div>
             </div>
             <div class="info-item">
+                <div class="info-label">Max Active Branches</div>
+                <div class="info-value" id="maxActiveBranches">-</div>
+            </div>
+            <div class="info-item">
                 <div class="info-label">Target Digit</div>
                 <div class="info-value" id="targetDigit">-</div>
             </div>
@@ -587,11 +591,13 @@
             if (state.history.length > 0) {
                 const current = state.history[state.history.length - 1];
                 document.getElementById('currentK').textContent = current.k;
-                document.getElementById('activeBranches').textContent = current.branches.length;
+                document.getElementById('activeBranches').textContent = state.activeBranches !== undefined ? state.activeBranches : current.branches.length;
+                document.getElementById('maxActiveBranches').textContent = state.maxActiveBranches !== undefined ? state.maxActiveBranches : '-';
                 document.getElementById('targetDigit').textContent = current.target_digit;
             } else {
                 document.getElementById('currentK').textContent = '0';
-                document.getElementById('activeBranches').textContent = '1';
+                document.getElementById('activeBranches').textContent = state.activeBranches !== undefined ? state.activeBranches : '1';
+                document.getElementById('maxActiveBranches').textContent = state.maxActiveBranches !== undefined ? state.maxActiveBranches : '1';
                 document.getElementById('targetDigit').textContent = '-';
             }
         }
@@ -654,11 +660,6 @@
             const p = parseInt(document.getElementById('primeP').value);
             const q = parseInt(document.getElementById('primeQ').value);
 
-            if (p === q) {
-                alert('Please select different primes for p and q');
-                return;
-            }
-
             isRunning = true;
             algorithmState = initializeAlgorithm(p, q);
             const status = document.getElementById('status');
@@ -684,7 +685,7 @@
             startBtn.disabled = false;
             startBtn.textContent = 'Start Factorization';
             drawVisualization({ history: [] });
-            ['productN', 'currentK', 'activeBranches', 'targetDigit'].forEach(id => {
+            ['productN', 'currentK', 'activeBranches', 'maxActiveBranches', 'targetDigit'].forEach(id => {
                 document.getElementById(id).textContent = '-';
             });
         }
