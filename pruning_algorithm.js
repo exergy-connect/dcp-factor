@@ -66,9 +66,12 @@ function comparePartialNumbers(p_history, q_history) {
 function globalFeasible(state, P_value, Q_value, N, k, totalDigits, sqrtN) {
     const remainingDigits = totalDigits - k;
     
-    // #1. Mandatory Symmetry Elimination (Search Space Halving)
-    // Enforce P ≤ Q immediately after digit extension
-    if (P_value > Q_value) {
+    // #1. Symmetry Elimination - ONLY at termination
+    // NOTE: Symmetry elimination (P > Q) is invalid for partial values because
+    // partial values don't determine final ordering. For example, at k=2:
+    // P=81, Q=59 (P > Q), but this is valid if final P=181, Q=59.
+    // Only enforce P ≤ Q when we're done (remainingDigits === 0).
+    if (remainingDigits === 0 && P_value > Q_value) {
         return 1; // Pruned by step 1
     }
     

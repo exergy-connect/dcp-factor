@@ -393,6 +393,22 @@
                     <option value="asap" selected>ASAP</option>
                 </select>
             </div>
+            <div class="control-group">
+                <label><input type="checkbox" id="parallelBasesCheck"> Parallel Bases</label>
+            </div>
+        </div>
+        
+        <div class="control-group" id="basesSelection" style="display: none; margin-top: 10px; flex-wrap: wrap;">
+            <label style="width: 100%; margin-bottom: 5px;">Bases to explore:</label>
+            <label style="margin-right: 15px;"><input type="checkbox" class="base-checkbox" value="8" checked> Base 8</label>
+            <label style="margin-right: 15px;"><input type="checkbox" class="base-checkbox" value="10" checked> Base 10</label>
+            <label style="margin-right: 15px;"><input type="checkbox" class="base-checkbox" value="16"> Base 16</label>
+            <button id="runParallelBtn" onclick="runParallelBasesExploration()" style="margin-left: auto;">Run Parallel Exploration</button>
+        </div>
+        
+        <div id="parallelResults" style="display: none; margin-top: 10px; background: rgba(20, 30, 60, 0.6); padding: 15px; border-radius: 10px; backdrop-filter: blur(10px); border: 1px solid rgba(138, 43, 226, 0.3);">
+            <div style="font-weight: 600; margin-bottom: 10px; color: #8a2be2;">Parallel Base Exploration Results</div>
+            <div id="parallelResultsContent"></div>
         </div>
 
         <button class="stats-toggle" id="statsToggle" onclick="toggleStats()">📊 Show Stats</button>
@@ -454,6 +470,7 @@
 
     <script src="https://scheduler.distributed.computer/dcp-client/dcp-client.js"></script>
     <script src="common.js"></script>
+    <script src="parallel_base_exploration.js"></script>
     <script>
         // Algorithm loader - dynamically loads the selected algorithm
         let currentAlgorithm = null;
@@ -1176,6 +1193,130 @@
         }
         
         populatePrimeDropdowns();
+
+        // Toggle parallel bases UI
+        document.getElementById('parallelBasesCheck').addEventListener('change', function(e) {
+            const basesSelection = document.getElementById('basesSelection');
+            basesSelection.style.display = e.target.checked ? 'flex' : 'none';
+        });
+
+        async function runParallelBasesExploration() {
+            const p = parseInt(document.getElementById('primeP').value);
+            const q = parseInt(document.getElementById('primeQ').value);
+            
+            if (!p || !q) {
+                alert('Please select primes for p and q first');
+                return;
+            }
+            
+            // Get selected bases
+            const baseCheckboxes = document.querySelectorAll('.base-checkbox:checked');
+            const bases = Array.from(baseCheckboxes).map(cb => parseInt(cb.value));
+            
+            if (bases.length === 0) {
+                alert('Please select at least one base to explore');
+                return;
+            }
+            
+            const status = document.getElementById('status');
+            const resultsDiv = document.getElementById('parallelResults');
+            const resultsContent = document.getElementById('parallelResultsContent');
+            const runBtn = document.getElementById('runParallelBtn');
+            
+            runBtn.disabled = true;
+            runBtn.textContent = 'Running...';
+            resultsDiv.style.display = 'block';
+            resultsContent.innerHTML = '<div style="color: #00bfff;">Initializing parallel exploration with bases: ' + bases.join(', ') + '...</div>';
+            status.textContent = `Running parallel base exploration: ${bases.join(', ')}`;
+            status.className = 'status processing';
+            
+            try {
+                const results = await runParallelBases(p, q, bases, (progress) => {
+                    // Update progress display
+                    let html = '<div style="margin-bottom: 15px;"><strong style="color: #8a2be2;">Progress:</strong></div>';
+                    
+                    for (const base of bases) {
+                        const baseResult = progress.allResults[base];
+                        if (baseResult) {
+                            const isSuccess = baseResult.success;
+                            const isDone = baseResult.done;
+                            const step = baseResult.step || 0;
+                            const totalSteps = baseResult.N_digits?.length || 0;
+                            const branches = baseResult.activeBranches || 0;
+                            const maxWidth = baseResult.maxFrontierWidth || 0;
+                            
+                            html += `<div style="margin: 8px 0; padding: 8px; background: rgba(138, 43, 226, 0.2); border-radius: 5px; border-left: 3px solid ${isSuccess ? '#ffd700' : isDone ? '#ff4444' : '#00bfff'};">
+                                <strong>Base ${base}:</strong> 
+                                ${isSuccess ? `<span style="color: #ffd700;">✓ Solution found!</span> (p=${baseResult.foundP}, q=${baseResult.foundQ}, time=${baseResult.elapsedTime}ms)` : 
+                                  isDone ? `<span style="color: #ff4444;">✗ No solution</span>` : 
+                                  `Step ${step}/${totalSteps}, ${branches} branches, max width: ${maxWidth}`}
+                            </div>`;
+                        } else {
+                            html += `<div style="margin: 8px 0; padding: 8px; background: rgba(138, 43, 226, 0.2); border-radius: 5px; border-left: 3px solid #666;">
+                                <strong>Base ${base}:</strong> <span style="color: #888;">Initializing...</span>
+                            </div>`;
+                        }
+                    }
+                    
+                    resultsContent.innerHTML = html;
+                });
+                
+                // Display final results
+                let html = '<div style="margin-bottom: 15px;"><strong style="color: #8a2be2;">Final Results:</strong></div>';
+                
+                if (results.winner) {
+                    html += `<div style="margin-bottom: 10px; padding: 10px; background: rgba(255, 215, 0, 0.2); border-radius: 5px; border: 2px solid #ffd700;">
+                        <strong style="color: #ffd700;">🏆 Winner: Base ${results.winner.base}</strong><br>
+                        Found factors: p = ${results.winner.result.foundP}, q = ${results.winner.result.foundQ}<br>
+                        Time: ${results.winner.result.elapsedTime}ms<br>
+                        Steps: ${results.winner.result.step}/${results.winner.result.N_digits.length}<br>
+                        Max frontier width: ${results.winner.result.maxFrontierWidth}
+                    </div>`;
+                }
+                
+                for (const base of bases) {
+                    const result = results.results[base];
+                    if (result.error) {
+                        html += `<div style="margin: 8px 0; padding: 8px; background: rgba(255, 68, 68, 0.2); border-radius: 5px; border-left: 3px solid #ff4444;">
+                            <strong>Base ${base}:</strong> <span style="color: #ff4444;">Error: ${result.error}</span>
+                        </div>`;
+                    } else {
+                        const isSuccess = result.success;
+                        const isDone = result.done;
+                        const color = isSuccess ? '#ffd700' : isDone ? '#ff4444' : '#00bfff';
+                        
+                        html += `<div style="margin: 8px 0; padding: 10px; background: rgba(138, 43, 226, 0.2); border-radius: 5px; border-left: 3px solid ${color};">
+                            <strong>Base ${base}:</strong> ${isSuccess ? '✓ Solution found' : isDone ? '✗ No solution' : 'Incomplete'}<br>
+                            ${result.N_digits ? `Digits: ${result.N_digits.length}` : ''}<br>
+                            ${result.step ? `Steps: ${result.step}/${result.N_digits?.length || '?'}` : ''}<br>
+                            ${result.maxFrontierWidth ? `Max frontier width: ${result.maxFrontierWidth}` : ''}<br>
+                            ${result.nodesVisited ? `Nodes visited: ${result.nodesVisited}` : ''}<br>
+                            ${result.nodesPruned ? `Nodes pruned: ${result.nodesPruned}` : ''}<br>
+                            ${result.elapsedTime ? `Time: ${result.elapsedTime}ms` : ''}
+                        </div>`;
+                    }
+                }
+                
+                resultsContent.innerHTML = html;
+                
+                if (results.winner) {
+                    status.textContent = `Parallel exploration complete! Winner: Base ${results.winner.base} (${results.winner.result.elapsedTime}ms)`;
+                    status.className = 'status success';
+                } else {
+                    status.textContent = 'Parallel exploration complete. No solution found.';
+                    status.className = 'status';
+                }
+                
+            } catch (error) {
+                console.error('Parallel base exploration error:', error);
+                status.textContent = `Error: ${error.message}`;
+                status.className = 'status';
+                resultsContent.innerHTML = `<div style="color: #ff4444;">Error: ${error.message}</div>`;
+            } finally {
+                runBtn.disabled = false;
+                runBtn.textContent = 'Run Parallel Exploration';
+            }
+        }
 
         function toggleStats() {
             const infoPanel = document.getElementById('infoPanel');
