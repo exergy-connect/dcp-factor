@@ -163,6 +163,118 @@
             flex-shrink: 0;
         }
 
+        .stats-toggle {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 5px;
+            }
+
+            h1 {
+                font-size: 1.5em;
+                margin-bottom: 3px;
+            }
+
+            .subtitle {
+                font-size: 0.85em;
+                margin-bottom: 8px;
+            }
+
+            .controls {
+                gap: 8px;
+                margin-bottom: 8px;
+            }
+
+            .control-group {
+                padding: 6px 10px;
+                font-size: 0.85em;
+            }
+
+            .control-group label {
+                font-size: 0.85em;
+            }
+
+            select {
+                padding: 6px 10px;
+                font-size: 0.9em;
+            }
+
+            button {
+                padding: 6px 15px;
+                font-size: 0.85em;
+            }
+
+            .info-panel {
+                display: none;
+                grid-template-columns: repeat(2, 1fr);
+                padding: 8px 10px;
+                gap: 8px;
+            }
+
+            .info-panel.mobile-visible {
+                display: grid;
+            }
+
+            .info-label {
+                font-size: 0.8em;
+            }
+
+            .info-value {
+                font-size: 1em;
+            }
+
+            .stats-toggle {
+                display: block;
+                width: 100%;
+                margin-bottom: 8px;
+                padding: 10px 20px;
+                font-size: 0.95em;
+                border: none;
+                border-radius: 8px;
+                background: linear-gradient(135deg, #8a2be2, #4b0082);
+                color: white;
+                cursor: pointer;
+                font-weight: 600;
+                transition: all 0.3s;
+                box-shadow: 0 0 15px rgba(138, 43, 226, 0.4);
+            }
+
+            .stats-toggle:hover {
+                background: linear-gradient(135deg, #9370db, #8a2be2);
+                transform: translateY(-2px);
+                box-shadow: 0 0 25px rgba(138, 43, 226, 0.6);
+            }
+
+            .visualization {
+                padding: 5px;
+                min-height: 300px;
+            }
+
+            .legend {
+                margin-top: 5px;
+                gap: 10px;
+                font-size: 0.85em;
+            }
+
+            .legend-color {
+                width: 16px;
+                height: 16px;
+            }
+
+            .status {
+                font-size: 0.9em;
+                margin-top: 3px;
+            }
+
+            .copyright {
+                font-size: 0.75em;
+                bottom: 5px;
+                right: 5px;
+            }
+        }
+
         .info-item {
             text-align: center;
         }
@@ -283,7 +395,9 @@
             </div>
         </div>
 
-        <div class="info-panel">
+        <button class="stats-toggle" id="statsToggle" onclick="toggleStats()">📊 Show Stats</button>
+
+        <div class="info-panel" id="infoPanel">
             <div class="info-item">
                 <div class="info-label">Product N = p × q</div>
                 <div class="info-value" id="productN">-</div>
@@ -427,9 +541,15 @@
         function resizeCanvas() {
             const canvas = document.getElementById('canvas');
             const visualization = canvas.parentElement;
-            canvas.width = visualization.offsetWidth - 20;
-            canvas.height = visualization.offsetHeight - 20;
+            const isMobile = window.innerWidth <= 768;
+            const padding = isMobile ? 10 : 20;
+            canvas.width = visualization.offsetWidth - padding;
+            canvas.height = visualization.offsetHeight - padding;
             initStars();
+            // Redraw if there's a current state
+            if (algorithmState) {
+                drawVisualization(algorithmState);
+            }
         }
         
         setTimeout(() => {
@@ -452,7 +572,8 @@
         function drawVisualization(state) {
             const centerX = canvas.width / 2;
             const centerY = canvas.height / 2;
-            const baseRadius = 40;
+            const isMobile = window.innerWidth <= 768;
+            const baseRadius = isMobile ? 25 : 40;
 
             if (!(state.success && state.solutionPath?.length)) {
                 ctx.fillStyle = '#0a0e27';
@@ -466,14 +587,14 @@
                 startGradient.addColorStop(0, '#8a2be2');
                 startGradient.addColorStop(1, '#1a0033');
                 ctx.fillStyle = startGradient;
-                ctx.shadowBlur = 30;
+                ctx.shadowBlur = isMobile ? 20 : 30;
                 ctx.shadowColor = '#8a2be2';
                 ctx.beginPath();
                 ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.shadowBlur = 0;
                 ctx.fillStyle = '#fff';
-                ctx.font = 'bold 24px Arial';
+                ctx.font = isMobile ? 'bold 16px Arial' : 'bold 24px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText('Start', centerX, centerY);
@@ -481,8 +602,24 @@
             }
 
             if (state.success && state.solutionPath?.length) {
-                const maxRadius = Math.min(canvas.width, canvas.height) * 0.4;
+                // Detect mobile screen
+                const isMobile = window.innerWidth <= 768;
                 const numDigits = state.N_digits.length;
+                
+                // Use smaller maxRadius on mobile and ensure it fits within canvas
+                let maxRadius;
+                if (isMobile) {
+                    // On mobile, use a more conservative radius and ensure it fits
+                    maxRadius = Math.min(canvas.width * 0.35, canvas.height * 0.4);
+                    // Ensure we don't go off-screen
+                    maxRadius = Math.min(maxRadius, (canvas.width - centerX - 20));
+                } else {
+                    maxRadius = Math.min(canvas.width, canvas.height) * 0.4;
+                }
+                
+                // Adjust base radius for mobile
+                const mobileBaseRadius = isMobile ? 25 : baseRadius;
+                const mobileRadius = isMobile ? 20 : 30;
                 
                 for (let i = 0; i < numDigits; i++) {
                     const digitPos = numDigits - 1 - i; // MSB to LSD
@@ -491,51 +628,55 @@
                     const ringRadius = i === 0 ? 0 : maxRadius * i / (numDigits - 1);
                     const x = centerX + ringRadius;
                     const y = centerY;
-                    const radius = i === 0 ? baseRadius : 30;
+                    const radius = i === 0 ? mobileBaseRadius : mobileRadius;
+                    
+                    // Ensure x position doesn't exceed canvas bounds
+                    const maxX = canvas.width - radius - 10;
+                    const finalX = Math.min(x, maxX);
                     
                     // Draw connecting line
                     if (i > 0) {
                         const prevRadius = i === 1 ? 0 : maxRadius * (i - 1) / (numDigits - 1);
-                        const prevX = centerX + prevRadius;
-                        const gradient = ctx.createLinearGradient(prevX, y, x, y);
+                        const prevX = Math.min(centerX + prevRadius, maxX);
+                        const gradient = ctx.createLinearGradient(prevX, y, finalX, y);
                         gradient.addColorStop(0, 'rgba(255, 215, 0, 0.6)');
                         gradient.addColorStop(1, 'rgba(255, 215, 0, 0.8)');
                         ctx.strokeStyle = gradient;
-                        ctx.lineWidth = 2;
-                        ctx.shadowBlur = 8;
+                        ctx.lineWidth = isMobile ? 1.5 : 2;
+                        ctx.shadowBlur = isMobile ? 6 : 8;
                         ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
                         ctx.beginPath();
                         ctx.moveTo(prevX, y);
-                        ctx.lineTo(x, y);
+                        ctx.lineTo(finalX, y);
                         ctx.stroke();
                         ctx.shadowBlur = 0;
                     }
                     
                     // Draw golden circle
-                    const circleGradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+                    const circleGradient = ctx.createRadialGradient(finalX, y, 0, finalX, y, radius);
                     circleGradient.addColorStop(0, '#ffd700');
                     circleGradient.addColorStop(0.5, '#ffed4e');
                     circleGradient.addColorStop(1, '#daa520');
                     ctx.fillStyle = circleGradient;
-                    ctx.shadowBlur = 30;
+                    ctx.shadowBlur = isMobile ? 20 : 30;
                     ctx.shadowColor = '#ffd700';
                     ctx.beginPath();
-                    ctx.arc(x, y, radius, 0, Math.PI * 2);
+                    ctx.arc(finalX, y, radius, 0, Math.PI * 2);
                     ctx.fill();
                     ctx.strokeStyle = '#ffd700';
-                    ctx.lineWidth = 3;
+                    ctx.lineWidth = isMobile ? 2 : 3;
                     ctx.stroke();
                     ctx.shadowBlur = 0;
                     
-                    // Draw digit and (p,q)
+                    // Draw digit and (p,q) with mobile-appropriate font sizes
                     ctx.fillStyle = '#4b0082';
-                    ctx.font = 'bold 28px Arial';
+                    ctx.font = isMobile ? 'bold 18px Arial' : 'bold 28px Arial';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText(digit.toString(), x, y - 10);
+                    ctx.fillText(digit.toString(), finalX, y - (isMobile ? 6 : 10));
                     if (step) {
-                        ctx.font = '14px Arial';
-                        ctx.fillText(`(${step.pk},${step.qk})`, x, y + 12);
+                        ctx.font = isMobile ? '11px Arial' : '14px Arial';
+                        ctx.fillText(`(${step.pk},${step.qk})`, finalX, y + (isMobile ? 8 : 12));
                     }
                 }
                 return;
@@ -552,24 +693,24 @@
             ctx.beginPath();
             ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
             ctx.fill();
-            ctx.shadowBlur = 30;
+            ctx.shadowBlur = isMobile ? 20 : 30;
             ctx.shadowColor = '#8a2be2';
             ctx.strokeStyle = '#9370db';
-            ctx.lineWidth = 3;
+            ctx.lineWidth = isMobile ? 2 : 3;
             ctx.stroke();
             ctx.shadowBlur = 0;
 
             // Draw target digit
             ctx.fillStyle = 'white';
-            ctx.font = 'bold 28px Arial';
+            ctx.font = isMobile ? 'bold 18px Arial' : 'bold 28px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(targetDigit.toString(), centerX, centerY - 8);
-            ctx.font = '14px Arial';
-            ctx.fillText(`k=${k}`, centerX, centerY + 12);
+            ctx.fillText(targetDigit.toString(), centerX, centerY - (isMobile ? 6 : 8));
+            ctx.font = isMobile ? '11px Arial' : '14px Arial';
+            ctx.fillText(`k=${k}`, centerX, centerY + (isMobile ? 8 : 12));
 
-            const branchRadius = 30;
-            const maxRadius = Math.min(canvas.width, canvas.height) * 0.4;
+            const branchRadius = isMobile ? 20 : 30;
+            const maxRadius = isMobile ? Math.min(canvas.width * 0.35, canvas.height * 0.4) : Math.min(canvas.width, canvas.height) * 0.4;
             const numRings = state.N_digits.length - 1;
             
             function getBranchPosition(kValue, branchIndex, numBranches) {
@@ -642,24 +783,24 @@
                     }
                     
                     ctx.fillStyle = gradient;
-                    ctx.shadowBlur = isSolution ? 30 : 20;
+                    ctx.shadowBlur = isSolution ? (isMobile ? 20 : 30) : (isMobile ? 15 : 20);
                     ctx.shadowColor = isSolution ? '#ffd700' : (isFinal ? '#00ff88' : '#00bfff');
                     ctx.beginPath();
                     ctx.arc(x, y, branchRadius, 0, Math.PI * 2);
                     ctx.fill();
                     ctx.strokeStyle = isSolution ? '#ffd700' : '#9370db';
-                    ctx.lineWidth = isSolution ? 3 : 2;
+                    ctx.lineWidth = isSolution ? (isMobile ? 2 : 3) : (isMobile ? 1.5 : 2);
                     ctx.stroke();
                     ctx.shadowBlur = 0;
                     
                     // Draw text
                     ctx.fillStyle = 'white';
-                    ctx.font = 'bold 16px Arial';
+                    ctx.font = isMobile ? 'bold 12px Arial' : 'bold 16px Arial';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText(branch.lastTwoDigits, x, y - 6);
-                    ctx.font = '12px Arial';
-                    ctx.fillText(`${branch.pk},${branch.qk}`, x, y + 10);
+                    ctx.fillText(branch.lastTwoDigits, x, y - (isMobile ? 4 : 6));
+                    ctx.font = isMobile ? '10px Arial' : '12px Arial';
+                    ctx.fillText(`${branch.pk},${branch.qk}`, x, y + (isMobile ? 7 : 10));
                 });
             }
 
@@ -669,10 +810,11 @@
                     const {x, y} = getBranchPosition(stepData.k, index, stepData.branches.length);
                     const isSolution = branch.isSolution;
                     ctx.fillStyle = isSolution ? 'rgba(255, 215, 0, 0.6)' : 'rgba(0, 191, 255, 0.2)';
-                    ctx.shadowBlur = isSolution ? 15 : 10;
+                    ctx.shadowBlur = isSolution ? (isMobile ? 10 : 15) : (isMobile ? 7 : 10);
                     ctx.shadowColor = isSolution ? 'rgba(255, 215, 0, 0.8)' : 'rgba(0, 191, 255, 0.5)';
                     ctx.beginPath();
-                    ctx.arc(x, y, isSolution ? 18 : 15, 0, Math.PI * 2);
+                    const histRadius = isSolution ? (isMobile ? 12 : 18) : (isMobile ? 10 : 15);
+                    ctx.arc(x, y, histRadius, 0, Math.PI * 2);
                     ctx.fill();
                     ctx.shadowBlur = 0;
                 });
@@ -1034,6 +1176,19 @@
         }
         
         populatePrimeDropdowns();
+
+        function toggleStats() {
+            const infoPanel = document.getElementById('infoPanel');
+            const toggleBtn = document.getElementById('statsToggle');
+            
+            if (infoPanel.classList.contains('mobile-visible')) {
+                infoPanel.classList.remove('mobile-visible');
+                toggleBtn.textContent = '📊 Show Stats';
+            } else {
+                infoPanel.classList.add('mobile-visible');
+                toggleBtn.textContent = '📊 Hide Stats';
+            }
+        }
     </script>
     <script src="dcp-integration.js"></script>
     <script>

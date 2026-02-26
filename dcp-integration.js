@@ -84,12 +84,6 @@
             status.className = 'status processing';
             
             try {
-                // Load algorithm if needed
-                const currentAlgorithm = getCurrentAlgorithm();
-                if (currentAlgorithm !== 'pruning') {
-                    await loadAlgorithm('pruning');
-                }
-                
                 // Initialize algorithm state
                 let state = initializeAlgorithm(p, q);
                 state.algorithm = 'pruning';
@@ -101,6 +95,16 @@
                 async function dcpWorkFunction(input) {
                     // Report progress to scheduler (required by DCP)
                     progress();
+                    
+                    // DCP-compatible logging: use simple string messages
+                    const P_str = typeof input.P_value === 'string' ? input.P_value : String(input.P_value);
+                    const Q_str = typeof input.Q_value === 'string' ? input.Q_value : String(input.Q_value);
+                    console.log('[DCP Worker] Input: k=' + input.k + 
+                        ', p_history_len=' + (input.p_history?.length || 0) + 
+                        ', q_history_len=' + (input.q_history?.length || 0) + 
+                        ', P=' + P_str + ', Q=' + Q_str + 
+                        ', carry_in=' + input.carry_in + 
+                        ', N_digits_len=' + (input.N_digits?.length || 0));
                     
                     // Extract input parameters
                     const { k, p_history, q_history, P_value, Q_value, carry_in, N_digits, N, sqrtN } = input;
@@ -140,12 +144,17 @@
                     }
                     
                     // Inline workFunction logic (simplified version without pruning for now)
-                    if (!N_digits || k < 1 || k > N_digits.length) return [];
+                    if (!N_digits || k < 1 || k > N_digits.length) {
+                        console.log('[DCP Worker] ERROR: Invalid input - k=' + k + ', N_digits_len=' + (N_digits?.length || 'undefined'));
+                        return [];
+                    }
                     
                     const target_digit = N_digits[k - 1];
                     const nextStates = [];
                     const isLastDigit = k === N_digits.length;
                     const totalDigits = N_digits.length;
+                    
+                    console.log('[DCP Worker] Processing: k=' + k + ', target_digit=' + target_digit + ', isLastDigit=' + isLastDigit + ', totalDigits=' + totalDigits);
                     
                     // Pre-compute base sum for terms i=2 to k-1
                     let baseSum = 0;
@@ -219,6 +228,12 @@
                         }
                     }
                     
+                    console.log('[DCP Worker] Completed: k=' + k + ', found=' + nextStates.length + ' states');
+                    if (nextStates.length > 0 && nextStates[0]) {
+                        const sample = nextStates[0];
+                        console.log('[DCP Worker] Sample: k=' + sample.k + ', P=' + String(sample.P_value) + ', Q=' + String(sample.Q_value) + ', carry=' + sample.carry_in);
+                    }
+                    
                     return nextStates;
                 }
                 
@@ -235,15 +250,22 @@
                     }
                     
                     // Prepare frontier for DCP (ensure BigInt values are serializable)
+                    // Set k to current step for each branch
                     const serializableFrontier = state.frontier.map(branch => ({
                         ...branch,
+                        k: step, // Set k to current step
                         P_value: branch.P_value.toString(),
                         Q_value: branch.Q_value.toString(),
                         N: branch.N ? branch.N.toString() : state.N.toString(),
-                        sqrtN: branch.sqrtN ? branch.sqrtN.toString() : state.sqrtN.toString()
+                        sqrtN: branch.sqrtN ? branch.sqrtN.toString() : state.sqrtN.toString(),
+                        N_digits: state.N_digits // Include N_digits for worker function
                     }));
                     
                     // Create DCP job
+                    console.log(`[DCP] Step ${step}: Sending ${serializableFrontier.length} branches to workers`);
+                    if (serializableFrontier.length > 0) {
+                        console.log(`[DCP] Sample branch: k=${serializableFrontier[0].k}, p_history=${JSON.stringify(serializableFrontier[0].p_history)}, q_history=${JSON.stringify(serializableFrontier[0].q_history)}`);
+                    }
                     const job = compute.for(serializableFrontier, dcpWorkFunction);
                     
                     // Configure job metadata
@@ -299,24 +321,69 @@
                 // Execute on DCP network
                 console.log(`[DCP] Executing job with ${serializableFrontier.length} slices...`);
                 const results = await job.exec();
-                console.log(`[DCP] Job completed. Received ${results.length} results.`);
+                console.log(`[DCP] Job completed. Received ${results.length} result objects.`);
                     
-                    // Flatten results and convert BigInt strings back
+                    // Flatten results and convert BigInt strings back to BigInt (if needed)
                     const nextFrontier = [];
+                    console.log(`[DCP] Processing results, first result type:`, typeof results[0], Array.isArray(results[0]));
                     
-                    results.forEach((branchCandidates) => {
+                    results.forEach((resultObj) => {
+                        // Handle DCP result format: {result: Array, sliceNumber: number, ...}
+                        const branchCandidates = resultObj.result || resultObj;
+                        
                         if (Array.isArray(branchCandidates)) {
                             branchCandidates.forEach(candidate => {
-                                // Convert BigInt strings back to BigInt
-                                if (candidate.P_value) candidate.P_value = BigInt(candidate.P_value);
-                                if (candidate.Q_value) candidate.Q_value = BigInt(candidate.Q_value);
-                                if (candidate.N) candidate.N = BigInt(candidate.N);
-                                if (candidate.sqrtN) candidate.sqrtN = BigInt(candidate.sqrtN);
+                                // Convert BigInt strings/values to BigInt (handle both string and BigInt types)
+                                if (candidate.P_value !== undefined) {
+                                    candidate.P_value = typeof candidate.P_value === 'bigint' 
+                                        ? candidate.P_value 
+                                        : BigInt(candidate.P_value);
+                                }
+                                if (candidate.Q_value !== undefined) {
+                                    candidate.Q_value = typeof candidate.Q_value === 'bigint' 
+                                        ? candidate.Q_value 
+                                        : BigInt(candidate.Q_value);
+                                }
+                                if (candidate.N !== undefined) {
+                                    candidate.N = typeof candidate.N === 'bigint' 
+                                        ? candidate.N 
+                                        : BigInt(candidate.N);
+                                }
+                                if (candidate.sqrtN !== undefined) {
+                                    candidate.sqrtN = typeof candidate.sqrtN === 'bigint' 
+                                        ? candidate.sqrtN 
+                                        : BigInt(candidate.sqrtN);
+                                }
                                 nextFrontier.push(candidate);
                             });
+                        } else if (branchCandidates && typeof branchCandidates === 'object') {
+                            // Handle single result object (not in array)
+                            const candidate = branchCandidates;
+                            if (candidate.P_value !== undefined) {
+                                candidate.P_value = typeof candidate.P_value === 'bigint' 
+                                    ? candidate.P_value 
+                                    : BigInt(candidate.P_value);
+                            }
+                            if (candidate.Q_value !== undefined) {
+                                candidate.Q_value = typeof candidate.Q_value === 'bigint' 
+                                    ? candidate.Q_value 
+                                    : BigInt(candidate.Q_value);
+                            }
+                            if (candidate.N !== undefined) {
+                                candidate.N = typeof candidate.N === 'bigint' 
+                                    ? candidate.N 
+                                    : BigInt(candidate.N);
+                            }
+                            if (candidate.sqrtN !== undefined) {
+                                candidate.sqrtN = typeof candidate.sqrtN === 'bigint' 
+                                    ? candidate.sqrtN 
+                                    : BigInt(candidate.sqrtN);
+                            }
+                            nextFrontier.push(candidate);
                         }
                     });
                     
+                    console.log(`[DCP] Processed results: ${nextFrontier.length} branches added to frontier`);
                     state.frontier = nextFrontier;
                     
                     // Check for solution
