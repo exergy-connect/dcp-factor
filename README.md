@@ -52,6 +52,17 @@ The IVI algorithm can operate in any base $b \geq 2$. The choice of base signifi
 
 The algorithm adapts the IVI constraint to any base: $\sum_{i=1}^{k} p_i q_{k-i+1} + c_k = n_k + b \cdot c_{k+1}$, where carries propagate in base $b$.
 
+### Parallel Base Exploration
+
+The algorithm can explore multiple bases simultaneously to discover interference patterns and identify the optimal base for a given number. This parallel exploration:
+
+- **Runs concurrently**: Multiple bases are processed in parallel, allowing real-time comparison
+- **Identifies winners**: The first base to find a solution is highlighted, showing which base was most efficient
+- **Reveals patterns**: By comparing performance across bases, you can observe how different number representations affect the search space
+- **Optimizes selection**: The results help identify which base works best for similar numbers
+
+This feature enables empirical discovery of base-dependent performance characteristics, revealing how the "Adjacent Possible" expands differently across different number representations.
+
 ## How It Works
 
 ### The Expanding Web
