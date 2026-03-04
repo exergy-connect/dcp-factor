@@ -292,6 +292,17 @@ Ideas that are mathematically sound and could be added (with care to avoid wrong
 
 **Note:** This is already implied by the growth envelope (step 4): maxContribution = (Pmax·Qmax − Pₖ·Qₖ), so maxContribution < gap ⟺ Pmax·Qmax < N. So no separate step is needed unless we want an earlier, coarser check (e.g. before computing gap) using a cheap upper bound on Pmax·Qmax.
 
+### 16.7 Frontier width per step: unimodal pattern (empirical)
+
+**Observation:** The frontier width per step (number of admissible branches at each digit position k) often **increases to a maximum and then decreases** — a unimodal shape over k = 1, 2, …, n.
+
+**Heuristic explanation:**
+- **Near the LSD (small k):** Few digits are fixed; the IVI constraint and carry limit how many digit pairs extend each branch, but many branches can still survive. Pruning (overshoot, sqrt, growth envelope) is relatively loose because the “gap” and “remaining contribution” involve many digits.
+- **Toward the middle:** More digits are fixed, so the gap and contribution bounds tighten; however, the number of ways to reach a given partial (Pₖ, Qₖ) can still grow as k increases (each of many branches can spawn several valid next digits), so the frontier can grow.
+- **Toward the MSD (large k):** The remaining “tail” is short. Pruning becomes very tight: min/max contribution (steps 5–6), upper tail (step 7), and the fact that only a few completions can hit N exactly force the frontier to shrink. At the last step we need exactly one branch with the right product and zero carry.
+
+So a **rise then fall** in width is plausible: freedom in the middle, tight constraints at both ends. This is **not proven** to hold in all cases; the shape can depend on N, the base, and the pruning strength. Some runs may show plateaus or multiple local maxima. Treat the unimodal pattern as an **empirical tendency**, not a theorem.
+
 ---
 
 **Summary:** The most promising and low-risk additions are **mod 9 feasibility** (16.1), **length split** (16.2), and **lower-tail coupling** (16.3). **Tighter minimum contribution** (16.4) and **mod m state** (16.5) need careful handling of leading zeros and state size.

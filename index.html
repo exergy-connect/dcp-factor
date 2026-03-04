@@ -401,6 +401,9 @@
         <div class="control-group" id="basesSelection" style="display: none; margin-top: 10px; flex-wrap: wrap;">
             <label style="width: 100%; margin-bottom: 5px;">Bases to explore:</label>
             <label style="margin-right: 15px;"><input type="checkbox" id="enableAllBases" onchange="toggleAllBases(this.checked)"> Enable all</label>
+            <label style="margin-right: 15px;"><input type="checkbox" class="base-checkbox" value="2"> Base 2</label>
+            <label style="margin-right: 15px;"><input type="checkbox" class="base-checkbox" value="3"> Base 3</label>
+            <label style="margin-right: 15px;"><input type="checkbox" class="base-checkbox" value="5"> Base 5</label>
             <label style="margin-right: 15px;"><input type="checkbox" class="base-checkbox" value="6"> Base 6</label>
             <label style="margin-right: 15px;"><input type="checkbox" class="base-checkbox" value="8" checked> Base 8</label>
             <label style="margin-right: 15px;"><input type="checkbox" class="base-checkbox" value="10" checked> Base 10</label>
@@ -1239,9 +1242,9 @@
             
             try {
                 const results = await runParallelBases(p, q, bases, (progress) => {
-                    // Update progress display
+                    // Update progress display (tiles)
                     let html = '<div style="margin-bottom: 15px;"><strong style="color: #8a2be2;">Progress:</strong></div>';
-                    
+                    html += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;">';
                     for (const base of bases) {
                         const baseResult = progress.allResults[base];
                         if (baseResult) {
@@ -1251,63 +1254,73 @@
                             const totalSteps = baseResult.N_digits?.length || 0;
                             const branches = baseResult.activeBranches || 0;
                             const maxWidth = baseResult.maxFrontierWidth || 0;
-                            
-                            html += `<div style="margin: 8px 0; padding: 8px; background: rgba(138, 43, 226, 0.2); border-radius: 5px; border-left: 3px solid ${isSuccess ? '#ffd700' : isDone ? '#ff4444' : '#00bfff'};">
-                                <strong>Base ${base}:</strong> 
-                                ${isSuccess ? `<span style="color: #ffd700;">✓ Solution found!</span> (p=${baseResult.foundP}, q=${baseResult.foundQ}, time=${baseResult.elapsedTime}ms)` : 
+                            const borderColor = isSuccess ? '#ffd700' : isDone ? '#ff4444' : '#00bfff';
+                            html += `<div style="padding: 10px; background: rgba(138, 43, 226, 0.2); border-radius: 8px; border: 2px solid ${borderColor}; min-width: 0;">
+                                <strong>Base ${base}</strong><br>
+                                ${isSuccess ? `<span style="color: #ffd700;">✓ Solution!</span><br>p=${baseResult.foundP}, q=${baseResult.foundQ}<br>${baseResult.elapsedTime}ms` : 
                                   isDone ? `<span style="color: #ff4444;">✗ No solution</span>` : 
-                                  `Step ${step}/${totalSteps}, ${branches} branches, max width: ${maxWidth}`}
+                                  `Step ${step}/${totalSteps}<br>${branches} branches<br>max width: ${maxWidth}`}
                             </div>`;
                         } else {
-                            html += `<div style="margin: 8px 0; padding: 8px; background: rgba(138, 43, 226, 0.2); border-radius: 5px; border-left: 3px solid #666;">
-                                <strong>Base ${base}:</strong> <span style="color: #888;">Initializing...</span>
+                            html += `<div style="padding: 10px; background: rgba(138, 43, 226, 0.2); border-radius: 8px; border: 2px solid #666; min-width: 0;">
+                                <strong>Base ${base}</strong><br><span style="color: #888;">Initializing...</span>
                             </div>`;
                         }
                     }
-                    
+                    html += '</div>';
                     resultsContent.innerHTML = html;
                 });
                 
-                // Display final results
+                // Display final results (tiles)
                 let html = '<div style="margin-bottom: 15px;"><strong style="color: #8a2be2;">Final Results:</strong></div>';
-                
                 if (results.winner) {
-                    html += `<div style="margin-bottom: 10px; padding: 10px; background: rgba(255, 215, 0, 0.2); border-radius: 5px; border: 2px solid #ffd700;">
+                    const w = results.winner.result;
+                    const widthArr = (w.frontierWidthPerStep && w.frontierWidthPerStep.length) ? w.frontierWidthPerStep : [];
+                    html += `<div style="margin-bottom: 12px; padding: 10px; background: rgba(255, 215, 0, 0.2); border-radius: 8px; border: 2px solid #ffd700;">
                         <strong style="color: #ffd700;">🏆 Winner: Base ${results.winner.base}</strong><br>
-                        Found factors: p = ${results.winner.result.foundP}, q = ${results.winner.result.foundQ}<br>
-                        Time: ${results.winner.result.elapsedTime}ms<br>
-                        Steps: ${results.winner.result.step}/${results.winner.result.N_digits.length}<br>
-                        Max frontier width: ${results.winner.result.maxFrontierWidth}
+                        p = ${w.foundP}, q = ${w.foundQ}<br>
+                        ${w.N_digits ? w.N_digits.length + ' steps' : ''} · Width/step: [${widthArr.join(', ')}]
                     </div>`;
                 }
-                
+                const widths = bases.map(b => results.results[b].maxFrontierWidth).filter(x => x != null && x !== undefined);
+                const times = bases.map(b => results.results[b].elapsedTime).filter(x => x != null && x !== undefined);
+                const minWidth = widths.length ? Math.min(...widths) : null;
+                const minTime = times.length ? Math.min(...times) : null;
+                html += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;">';
                 for (const base of bases) {
                     const result = results.results[base];
                     if (result.error) {
-                        html += `<div style="margin: 8px 0; padding: 8px; background: rgba(255, 68, 68, 0.2); border-radius: 5px; border-left: 3px solid #ff4444;">
-                            <strong>Base ${base}:</strong> <span style="color: #ff4444;">Error: ${result.error}</span>
+                        html += `<div style="padding: 10px; background: rgba(255, 68, 68, 0.2); border-radius: 8px; border: 2px solid #ff4444; min-width: 0;">
+                            <strong>Base ${base}</strong><br><span style="color: #ff4444;">Error: ${result.error}</span>
                         </div>`;
                     } else {
                         const isSuccess = result.success;
                         const isDone = result.done;
                         const color = isSuccess ? '#ffd700' : isDone ? '#ff4444' : '#00bfff';
-                        
-                        html += `<div style="margin: 8px 0; padding: 10px; background: rgba(138, 43, 226, 0.2); border-radius: 5px; border-left: 3px solid ${color};">
-                            <strong>Base ${base}:</strong> ${isSuccess ? '✓ Solution found' : isDone ? '✗ No solution' : 'Incomplete'}<br>
-                            ${result.N_digits ? `Digits: ${result.N_digits.length}` : ''}<br>
-                            ${result.step ? `Steps: ${result.step}/${result.N_digits?.length || '?'}` : ''}<br>
-                            ${result.maxFrontierWidth ? `Max frontier width: ${result.maxFrontierWidth}` : ''}<br>
-                            ${result.nodesVisited ? `Nodes visited: ${result.nodesVisited}` : ''}<br>
-                            ${result.nodesPruned ? `Nodes pruned: ${result.nodesPruned}` : ''}<br>
-                            ${result.elapsedTime ? `Time: ${result.elapsedTime}ms` : ''}
+                        const bestWidth = minWidth != null && result.maxFrontierWidth === minWidth;
+                        const bestTime = minTime != null && result.elapsedTime === minTime;
+                        const extraStyle = (bestWidth || bestTime) ? '; box-shadow: 0 0 0 2px rgba(0, 255, 127, 0.8); background: rgba(0, 255, 127, 0.12)' : '';
+                        const badges = [];
+                        if (bestTime) badges.push('<span style="font-size: 0.75em; color: #00ff7f;">⏱ best time</span>');
+                        if (bestWidth) badges.push('<span style="font-size: 0.75em; color: #00ff7f;">📐 min width</span>');
+                        const widthArr = (result.frontierWidthPerStep && result.frontierWidthPerStep.length) ? result.frontierWidthPerStep : [];
+                        const stepsLine = result.N_digits ? (result.N_digits.length + ' steps') : '';
+                        html += `<div style="padding: 10px; background: rgba(138, 43, 226, 0.2); border-radius: 8px; border: 2px solid ${color}; min-width: 0${extraStyle}">
+                            <strong>Base ${base}</strong> ${badges.length ? badges.join(' ') : ''}<br>
+                            ${isSuccess ? '✓ Solution found' : isDone ? '✗ No solution' : 'Incomplete'}<br>
+                            ${stepsLine}<br>
+                            Width/step: [${widthArr.join(', ')}]<br>
+                            ${result.nodesVisited ? `Visited: ${result.nodesVisited}` : ''}<br>
+                            ${result.nodesPruned ? `Pruned: ${result.nodesPruned}` : ''}<br>
+                            ${result.elapsedTime ? `${result.elapsedTime}ms` : ''}
                         </div>`;
                     }
                 }
-                
+                html += '</div>';
                 resultsContent.innerHTML = html;
                 
                 if (results.winner) {
-                    status.textContent = `Parallel exploration complete! Winner: Base ${results.winner.base} (${results.winner.result.elapsedTime}ms)`;
+                    status.textContent = `Parallel exploration complete! Winner: Base ${results.winner.base} (min width: ${results.winner.result.maxFrontierWidth})`;
                     status.className = 'status success';
                 } else {
                     status.textContent = 'Parallel exploration complete. No solution found.';

@@ -51,6 +51,7 @@
             nodesVisited: 0,
             nodesPruned: 0,
             maxFrontierWidth: 1,
+            frontierWidthPerStep: [],
             startTime: Date.now(),
             success: false
         };
@@ -120,7 +121,7 @@
                     const activeBranches = allResults.length;
                     const maxActiveBranches = Math.max(state.maxActiveBranches || 0, activeBranches);
                     const maxFrontierWidth = Math.max(state.maxFrontierWidth || 0, activeBranches);
-                    
+                    const frontierWidthPerStep = [...(state.frontierWidthPerStep || []), activeBranches];
                     return {
                         ...state,
                         step: currentK,
@@ -139,6 +140,7 @@
                         nodesVisited: nodesVisited,
                         nodesPruned: nodesPruned,
                         maxFrontierWidth: maxFrontierWidth,
+                        frontierWidthPerStep: frontierWidthPerStep,
                         elapsedTime: Date.now() - state.startTime
                     };
                 }
@@ -146,6 +148,7 @@
             const activeBranches = allResults.length;
             const maxActiveBranches = Math.max(state.maxActiveBranches || 0, activeBranches);
             const maxFrontierWidth = Math.max(state.maxFrontierWidth || 0, activeBranches);
+            const frontierWidthPerStep = [...(state.frontierWidthPerStep || []), activeBranches];
             return {
                 ...state,
                 done: true,
@@ -153,7 +156,8 @@
                 maxActiveBranches: maxActiveBranches,
                 nodesVisited: nodesVisited,
                 nodesPruned: nodesPruned,
-                maxFrontierWidth: maxFrontierWidth
+                maxFrontierWidth: maxFrontierWidth,
+                frontierWidthPerStep: frontierWidthPerStep
             };
         }
         
@@ -166,7 +170,7 @@
         const activeBranches = allResults.length;
         const maxActiveBranches = Math.max(state.maxActiveBranches || 0, activeBranches);
         const maxFrontierWidth = Math.max(state.maxFrontierWidth || 0, activeBranches);
-        
+        const frontierWidthPerStep = [...(state.frontierWidthPerStep || []), activeBranches];
         return {
             ...state,
             step: currentK,
@@ -176,7 +180,8 @@
             maxActiveBranches: maxActiveBranches,
             nodesVisited: nodesVisited,
             nodesPruned: nodesPruned,
-            maxFrontierWidth: maxFrontierWidth
+            maxFrontierWidth: maxFrontierWidth,
+            frontierWidthPerStep: frontierWidthPerStep
         };
     }
 
@@ -248,12 +253,12 @@
         
         await Promise.all(promises);
         
-        // Find which base found the solution first
+        // Winner = smallest max frontier width (best pruning); time does not influence winner
         let winner = null;
-        let fastestTime = Infinity;
+        let bestWidth = Infinity;
         for (const [base, result] of Object.entries(results)) {
-            if (result.success && result.elapsedTime < fastestTime) {
-                fastestTime = result.elapsedTime;
+            if (result.success && result.maxFrontierWidth != null && result.maxFrontierWidth < bestWidth) {
+                bestWidth = result.maxFrontierWidth;
                 winner = { base: parseInt(base), result: result };
             }
         }
