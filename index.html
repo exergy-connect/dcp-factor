@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ΦᴰCᴾ: Interactive Visualization</title>
+    <title>Φᵈᶜᵖ: Interactive Visualization</title>
     <style>
         * {
             margin: 0;
@@ -360,6 +360,106 @@
             color: #00bfff;
             text-shadow: 0 0 20px rgba(0, 191, 255, 0.8);
         }
+
+        .breakdown-tile {
+            cursor: pointer;
+        }
+        .breakdown-tile:hover {
+            filter: brightness(1.15);
+        }
+        #breakdownModal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        #breakdownModal.visible {
+            display: flex;
+        }
+        #breakdownModal .modal-content {
+            background: linear-gradient(180deg, #1a1a2e 0%, #0a0e27 100%);
+            border: 1px solid rgba(138, 43, 226, 0.5);
+            border-radius: 12px;
+            max-width: 90vw;
+            max-height: 85vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 40px rgba(138, 43, 226, 0.4);
+        }
+        #breakdownModal .modal-header {
+            padding: 12px 20px;
+            border-bottom: 1px solid rgba(138, 43, 226, 0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        #breakdownModal .modal-header h2 {
+            margin: 0;
+            font-size: 1.2em;
+            color: #8a2be2;
+        }
+        #breakdownModal .modal-body {
+            overflow-y: auto;
+            padding: 15px 20px;
+        }
+        #breakdownModal .step-block {
+            margin-bottom: 20px;
+            padding: 12px;
+            background: rgba(20, 30, 60, 0.5);
+            border-radius: 8px;
+            border: 1px solid rgba(0, 191, 255, 0.2);
+        }
+        #breakdownModal .step-block h3 {
+            margin: 0 0 10px 0;
+            font-size: 1em;
+            color: #00bfff;
+        }
+        #breakdownModal .pairs-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        #breakdownModal .pair-tag {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-family: monospace;
+        }
+        #breakdownModal .pair-tag.eliminated {
+            background: rgba(255, 68, 68, 0.35);
+            color: #ff8888;
+            border: 1px solid #ff4444;
+        }
+        #breakdownModal .pair-tag.accepted {
+            background: rgba(0, 191, 255, 0.2);
+            color: #88ddff;
+            border: 1px solid rgba(0, 191, 255, 0.5);
+        }
+        #breakdownModal .pair-tag.golden {
+            background: rgba(255, 215, 0, 0.35);
+            color: #ffd700;
+            border: 1px solid #ffd700;
+            font-weight: bold;
+        }
+        #breakdownModal .modal-close {
+            background: transparent;
+            border: 1px solid rgba(138, 43, 226, 0.5);
+            color: #9370db;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        #breakdownModal .modal-close:hover {
+            background: rgba(138, 43, 226, 0.3);
+        }
     </style>
 </head>
 <body>
@@ -411,6 +511,8 @@
             <label style="margin-right: 15px;"><input type="checkbox" class="base-checkbox" value="13"> Base 13</label>
             <label style="margin-right: 15px;"><input type="checkbox" class="base-checkbox" value="15"> Base 15</label>
             <label style="margin-right: 15px;"><input type="checkbox" class="base-checkbox" value="16"> Base 16</label>
+            <label style="margin-right: 15px;"><input type="checkbox" class="base-checkbox" value="17"> Base 17</label>
+            <label style="margin-right: 15px;"><input type="checkbox" class="base-checkbox" value="19"> Base 19</label>
             <button id="runParallelBtn" onclick="runParallelBasesExploration()" style="margin-left: auto;">Run Parallel Exploration</button>
         </div>
         
@@ -472,6 +574,17 @@
         
         <!-- Tooltip for pruning statistics -->
         <div id="pruningTooltip" style="display: none; position: fixed; background: rgba(26, 26, 46, 0.95); color: #00bfff; padding: 8px 12px; border-radius: 6px; border: 1px solid #00bfff; font-size: 0.85em; max-width: 250px; z-index: 1000; pointer-events: none; box-shadow: 0 4px 12px rgba(0, 191, 255, 0.3);"></div>
+    </div>
+
+    <!-- Breakdown modal (click a parallel-result tile to open) -->
+    <div id="breakdownModal" aria-hidden="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="breakdownModalTitle">Computation breakdown</h2>
+                <button type="button" class="modal-close" id="breakdownModalClose" aria-label="Close">Close</button>
+            </div>
+            <div class="modal-body" id="breakdownModalBody"></div>
+        </div>
     </div>
     
     <div class="copyright">© Exergy ∞ LLC</div>
@@ -1275,12 +1388,14 @@
                 let html = '<div style="margin-bottom: 15px;"><strong style="color: #8a2be2;">Final Results:</strong></div>';
                 if (results.winner) {
                     const w = results.winner.result;
+                    const winBase = results.winner.base;
                     const widthArr = (w.frontierWidthPerStep && w.frontierWidthPerStep.length) ? w.frontierWidthPerStep : null;
                     const widthLine = widthArr ? ('Width/step: [' + widthArr.join(', ') + ']') : (w.maxFrontierWidth != null ? 'Max width: ' + w.maxFrontierWidth : '');
+                    const conjMax = Math.ceil(winBase * winBase / 2);
                     html += `<div style="margin-bottom: 12px; padding: 10px; background: rgba(255, 215, 0, 0.2); border-radius: 8px; border: 2px solid #ffd700;">
-                        <strong style="color: #ffd700;">🏆 Winner: Base ${results.winner.base}</strong><br>
+                        <strong style="color: #ffd700;">🏆 Winner: Base ${winBase}</strong><br>
                         p = ${w.foundP}, q = ${w.foundQ}<br>
-                        ${w.N_digits ? w.N_digits.length + ' steps' : ''}${widthLine ? ' · ' + widthLine : ''}
+                        ${w.N_digits ? w.N_digits.length + ' steps' : ''}${widthLine ? ' · ' + widthLine : ''} · Conj. max: ${conjMax}
                     </div>`;
                 }
                 const widths = bases.map(b => results.results[b].maxFrontierWidth).filter(x => x != null && x !== undefined);
@@ -1307,20 +1422,24 @@
                         const widthArr = (result.frontierWidthPerStep && result.frontierWidthPerStep.length) ? result.frontierWidthPerStep : null;
                         const widthLine = widthArr ? ('Width/step: [' + widthArr.join(', ') + ']') : (result.maxFrontierWidth != null ? 'Max width: ' + result.maxFrontierWidth : '');
                         const stepsLine = result.N_digits ? (result.N_digits.length + ' steps') : '';
-                        html += `<div style="padding: 10px; background: rgba(138, 43, 226, 0.2); border-radius: 8px; border: 2px solid ${color}; min-width: 0${extraStyle}">
+                        const conjMax = Math.ceil(Number(base) * Number(base) / 2);
+                        html += `<div class="breakdown-tile" data-base="${base}" style="padding: 10px; background: rgba(138, 43, 226, 0.2); border-radius: 8px; border: 2px solid ${color}; min-width: 0${extraStyle}" title="Click for step-by-step breakdown">
                             <strong>Base ${base}</strong> ${badges.length ? badges.join(' ') : ''}<br>
                             ${isSuccess ? '✓ Solution found' : isDone ? '✗ No solution' : 'Incomplete'}<br>
                             ${stepsLine}<br>
                             ${widthLine}<br>
+                            Conj. max: ${conjMax}<br>
                             ${result.nodesVisited ? `Visited: ${result.nodesVisited}` : ''}<br>
                             ${result.nodesPruned ? `Pruned: ${result.nodesPruned}` : ''}<br>
-                            ${result.elapsedTime ? `${result.elapsedTime}ms` : ''}
+                            ${result.elapsedTime ? `${result.elapsedTime}ms` : ''}<br>
+                            <span style="font-size: 0.8em; opacity: 0.8;">Click for breakdown</span>
                         </div>`;
                     }
                 }
                 html += '</div>';
                 resultsContent.innerHTML = html;
-                
+                window.lastParallelResults = results;
+
                 if (results.winner) {
                     status.textContent = `Parallel exploration complete! Winner: Base ${results.winner.base} (min width: ${results.winner.result.maxFrontierWidth})`;
                     status.className = 'status success';
@@ -1352,6 +1471,86 @@
                 toggleBtn.textContent = '📊 Hide Stats';
             }
         }
+
+        const breakdownStatusLabels = {
+            rejected_ivi: 'IVI/carry',
+            rejected_carry: 'carry',
+            pruned_2: 'termination',
+            pruned_3: 'overshoot',
+            pruned_4: 'sqrt',
+            pruned_5: 'growth',
+            accepted: 'accepted'
+        };
+
+        function showBreakdown(base) {
+            const results = window.lastParallelResults;
+            if (!results || !results.results || !results.results[base]) {
+                return;
+            }
+            const result = results.results[base];
+            if (result.error) {
+                return;
+            }
+            const history = result.history || [];
+            const modal = document.getElementById('breakdownModal');
+            const titleEl = document.getElementById('breakdownModalTitle');
+            const bodyEl = document.getElementById('breakdownModalBody');
+            titleEl.textContent = 'Base ' + base + ' — Step-by-step computation breakdown';
+            let bodyHtml = '';
+            if (result.success && result.foundP != null) {
+                bodyHtml += '<p style="margin-bottom: 12px; color: #ffd700;">Solution: p = ' + result.foundP + ', q = ' + result.foundQ + '</p>';
+            }
+            if (history.length === 0) {
+                bodyHtml += '<p style="color: #888;">No step history available for this run.</p>';
+            } else {
+                const solutionPath = (result.solutionPath && result.solutionPath.length) ? result.solutionPath : [];
+                history.forEach(function(step) {
+                    const k = step.k;
+                    const target = step.target_digit;
+                    const sb = step.stepBreakdown;
+                    const pairs = (sb && sb.pairs) ? sb.pairs : [];
+                    const golden = solutionPath.find(function(entry) { return entry.k === k; }) || (sb && sb.golden) || null;
+                    const feasiblePairs = pairs.filter(function(p) { return p.status === 'accepted'; });
+                    const feasibleArr = feasiblePairs.map(function(p) { return '(' + p.pk + ',' + p.qk + ')'; }).join(', ');
+                    bodyHtml += '<div class="step-block">';
+                    bodyHtml += '<h3>Step ' + k + ' — target digit (base ' + base + '): ' + target + '</h3>';
+                    bodyHtml += '<p class="feasible-summary" style="margin: 0 0 8px 0; font-size: 0.9em; color: #88ddff;">Feasible pairs (' + feasiblePairs.length + '): [' + feasibleArr + ']</p>';
+                    bodyHtml += '<div class="pairs-row">';
+                    pairs.forEach(function(p) {
+                        const isGolden = golden && p.pk === golden.pk && p.qk === golden.qk;
+                        const isEliminated = p.status !== 'accepted';
+                        let label = '(' + p.pk + ',' + p.qk + ')';
+                        if (isEliminated) {
+                            label += ' ' + (breakdownStatusLabels[p.status] || p.status);
+                        }
+                        const cls = isGolden ? 'pair-tag golden' : (isEliminated ? 'pair-tag eliminated' : 'pair-tag accepted');
+                        bodyHtml += '<span class="' + cls + '">' + label + '</span>';
+                    });
+                    bodyHtml += '</div></div>';
+                });
+            }
+            bodyEl.innerHTML = bodyHtml;
+            modal.classList.add('visible');
+            modal.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeBreakdownModal() {
+            const modal = document.getElementById('breakdownModal');
+            modal.classList.remove('visible');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+
+        document.getElementById('breakdownModalClose').addEventListener('click', closeBreakdownModal);
+        document.getElementById('breakdownModal').addEventListener('click', function(e) {
+            if (e.target.id === 'breakdownModal') closeBreakdownModal();
+        });
+        document.getElementById('parallelResultsContent').addEventListener('click', function(e) {
+            const tile = e.target.closest('.breakdown-tile');
+            if (tile) {
+                const base = tile.getAttribute('data-base');
+                if (base) showBreakdown(parseInt(base, 10));
+            }
+        });
     </script>
     <script src="dcp-integration.js"></script>
     <script>

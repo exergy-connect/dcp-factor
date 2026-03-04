@@ -206,13 +206,15 @@ function powerOfBase(base, exponent) {
  * @param {bigint} input.N - Target number as BigInt
  * @param {bigint} input.sqrtN - Square root of N as BigInt
  * @param {number} base - Base for computation
- * @returns {Object} Object with states array and pruningStats
+ * @param {Object} [opts] - Optional settings; opts.collectBreakdown=true returns pairBreakdown per (pk,qk) with status
+ * @returns {Object} Object with states array, pruningStats, and optionally pairBreakdown
  */
-function workFunctionBase(input, base) {
+function workFunctionBase(input, base, opts) {
     const { k, p_history, q_history, P_value, Q_value, carry_in, N_digits, N, sqrtN } = input;
-    
+    const collectBreakdown = opts && opts.collectBreakdown;
+
     if (!N_digits || k < 1 || k > N_digits.length) {
-        return { states: [], pruningStats: {} };
+        return { states: [], pruningStats: {}, pairBreakdown: [] };
     }
     if (P_value === undefined || Q_value === undefined || N === undefined || sqrtN === undefined) {
         throw new Error('P_value, Q_value, N (BigInt), and sqrtN (BigInt) are required');
@@ -220,9 +222,14 @@ function workFunctionBase(input, base) {
     
     const target_digit = N_digits[k - 1];
     const nextStates = [];
+    const pairBreakdown = collectBreakdown ? [] : null;
     const isLastDigit = k === N_digits.length;
     const totalDigits = N_digits.length;
-    
+
+    function recordPair(pk, qk, status) {
+        if (pairBreakdown) pairBreakdown.push({ pk, qk, status });
+    }
+
     // Initialize pruning statistics
     const pruningStats = {
         1: 0, // Symmetry Elimination
@@ -262,73 +269,86 @@ function workFunctionBase(input, base) {
                 : baseSum + p1 * qk + pk * q1;
             
             const total = sumOfProducts + carry_in;
-            
-            if (total < target_digit) continue;
-            
+
+            if (total < target_digit) {
+                recordPair(pk, qk, 'rejected_ivi');
+                continue;
+            }
+
             const remainder = total - target_digit;
-            if (remainder % base === 0) {
-                const carry_out = Math.floor(remainder / base);
-                
-                // Carry validation
-                if (carry_out < 0 || carry_out > maxCarryOut || (isLastDigit && carry_out !== 0)) {
+            if (remainder % base !== 0) {
+                recordPair(pk, qk, 'rejected_ivi');
+                continue;
+            }
+            const carry_out = Math.floor(remainder / base);
+
+            // Carry validation
+            if (carry_out < 0 || carry_out > maxCarryOut || (isLastDigit && carry_out !== 0)) {
+                recordPair(pk, qk, 'rejected_carry');
+                continue;
+            }
+
+            const next_p_history = [...p_history, pk];
+            const next_q_history = [...q_history, qk];
+
+            // Update P_value and Q_value incrementally
+            const powerK = powerOfBase(base, k - 1);
+            const new_P_value = P_value + BigInt(pk) * powerK;
+            const new_Q_value = Q_value + BigInt(qk) * powerK;
+
+            // Global feasibility pruning (simplified version)
+            // Note: Symmetry elimination (P > Q) is invalid because partial values
+            // don't determine final ordering. For example, at k=2 in base 2:
+            // P=3, Q=1 (P > Q), but final P=11, Q=17 (P < Q).
+            // Removed symmetry pruning as it incorrectly prunes valid paths.
+
+            // #3. Immediate overshoot
+            if (new_P_value * new_Q_value > N) {
+                pruningStats[3]++;
+                recordPair(pk, qk, 'pruned_3');
+                continue;
+            }
+
+            // #4. Sqrt-based bound
+            if (new_P_value > sqrtN) {
+                pruningStats[4]++;
+                recordPair(pk, qk, 'pruned_4');
+                continue;
+            }
+
+            // #2. Exact termination rule
+            const remainingDigits = totalDigits - k;
+            if (remainingDigits === 0) {
+                if (new_P_value <= 1n || new_Q_value <= 1n) {
+                    pruningStats[2]++;
+                    recordPair(pk, qk, 'pruned_2');
                     continue;
                 }
-                
-                const next_p_history = [...p_history, pk];
-                const next_q_history = [...q_history, qk];
-                
-                // Update P_value and Q_value incrementally
-                const powerK = powerOfBase(base, k - 1);
-                const new_P_value = P_value + BigInt(pk) * powerK;
-                const new_Q_value = Q_value + BigInt(qk) * powerK;
-                
-                // Global feasibility pruning (simplified version)
-                // Note: Symmetry elimination (P > Q) is invalid because partial values
-                // don't determine final ordering. For example, at k=2 in base 2:
-                // P=3, Q=1 (P > Q), but final P=11, Q=17 (P < Q).
-                // Removed symmetry pruning as it incorrectly prunes valid paths.
-                
-                // #3. Immediate overshoot
-                if (new_P_value * new_Q_value > N) {
-                    pruningStats[3]++;
+                if (new_P_value * new_Q_value !== N) {
+                    pruningStats[2]++;
+                    recordPair(pk, qk, 'pruned_2');
                     continue;
                 }
-                
-                // #4. Sqrt-based bound
-                if (new_P_value > sqrtN) {
-                    pruningStats[4]++;
+            }
+
+            // #5. Growth envelope - check if maximum completion is too small
+            if (remainingDigits > 0) {
+                // M = base^remainingDigits - 1 (maximum tail value)
+                const M = powerOfBase(base, remainingDigits) - 1n;
+                // powerK is base^(k-1), but we need base^k for remaining digits
+                const powerK_remaining = powerOfBase(base, k);
+                // Maximum possible values: Pmax = P_value + M * base^k, Qmax = Q_value + M * base^k
+                const Pmax = new_P_value + M * powerK_remaining;
+                const Qmax = new_Q_value + M * powerK_remaining;
+                if (Pmax * Qmax < N) {
+                    pruningStats[5]++;
+                    recordPair(pk, qk, 'pruned_5');
                     continue;
                 }
-                
-                // #2. Exact termination rule
-                const remainingDigits = totalDigits - k;
-                if (remainingDigits === 0) {
-                    if (new_P_value <= 1n || new_Q_value <= 1n) {
-                        pruningStats[2]++;
-                        continue;
-                    }
-                    if (new_P_value * new_Q_value !== N) {
-                        pruningStats[2]++;
-                        continue;
-                    }
-                }
-                
-                // #5. Growth envelope - check if maximum completion is too small
-                if (remainingDigits > 0) {
-                    // M = base^remainingDigits - 1 (maximum tail value)
-                    const M = powerOfBase(base, remainingDigits) - 1n;
-                    // powerK is base^(k-1), but we need base^k for remaining digits
-                    const powerK_remaining = powerOfBase(base, k);
-                    // Maximum possible values: Pmax = P_value + M * base^k, Qmax = Q_value + M * base^k
-                    const Pmax = new_P_value + M * powerK_remaining;
-                    const Qmax = new_Q_value + M * powerK_remaining;
-                    if (Pmax * Qmax < N) {
-                        pruningStats[5]++;
-                        continue;
-                    }
-                }
-                
-                nextStates.push({
+            }
+
+            recordPair(pk, qk, 'accepted');
+            nextStates.push({
                     k: k + 1,
                     p_history: next_p_history,
                     q_history: next_q_history,
@@ -338,10 +358,9 @@ function workFunctionBase(input, base) {
                     pk: pk,
                     qk: qk,
                     lastTwoDigits: `${pk.toString(base)}${qk.toString(base)}`.padStart(2, '0')
-                });
-            }
+            });
         }
     }
-    
-    return { states: nextStates, pruningStats: pruningStats };
+
+    return { states: nextStates, pruningStats: pruningStats, pairBreakdown: pairBreakdown || [] };
 }

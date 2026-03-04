@@ -77,6 +77,22 @@
         let nodesPruned = state.nodesPruned || 0;
         const totalPruningStats = {};
         
+        // Merge pair breakdowns from all branches: for each (pk, qk), prefer 'accepted' if any branch accepted it
+        function mergeStepBreakdown(breakdowns, goldenPair) {
+            const byKey = {};
+            breakdowns.forEach(arr => {
+                (arr || []).forEach(({ pk, qk, status }) => {
+                    const key = pk + ',' + qk;
+                    if (!byKey[key] || status === 'accepted') {
+                        byKey[key] = { pk, qk, status };
+                    }
+                });
+            });
+            const pairs = Object.values(byKey);
+            return { pairs, golden: goldenPair };
+        }
+
+        const allPairBreakdowns = [];
         state.frontier.forEach((branch, parentIdx) => {
             const result = workFunctionBase({
                 ...branch,
@@ -84,10 +100,13 @@
                 N_digits: state.N_digits,
                 N: state.N_big,
                 sqrtN: state.sqrtN
-            }, base);
+            }, base, { collectBreakdown: true });
             
             const candidates = result.states || [];
             const stats = result.pruningStats || {};
+            if (result.pairBreakdown && result.pairBreakdown.length) {
+                allPairBreakdowns.push(result.pairBreakdown);
+            }
             
             nodesVisited += base * base; // base^2 digit pairs per branch
             nodesPruned += (base * base - candidates.length);
@@ -122,6 +141,8 @@
                     const maxActiveBranches = Math.max(state.maxActiveBranches || 0, activeBranches);
                     const maxFrontierWidth = Math.max(state.maxFrontierWidth || 0, activeBranches);
                     const frontierWidthPerStep = [...(state.frontierWidthPerStep || []), activeBranches];
+                    const goldenPair = { pk: branch.pk, qk: branch.qk };
+                    const stepBreakdown = mergeStepBreakdown(allPairBreakdowns, goldenPair);
                     return {
                         ...state,
                         step: currentK,
@@ -129,7 +150,8 @@
                         history: [...state.history, {
                             k: currentK,
                             target_digit: target_digit,
-                            branches: mapBranchesToHistory(allResults, branchIdx)
+                            branches: mapBranchesToHistory(allResults, branchIdx),
+                            stepBreakdown: stepBreakdown
                         }],
                         success: true,
                         foundP: p.toString(),
@@ -149,8 +171,17 @@
             const maxActiveBranches = Math.max(state.maxActiveBranches || 0, activeBranches);
             const maxFrontierWidth = Math.max(state.maxFrontierWidth || 0, activeBranches);
             const frontierWidthPerStep = [...(state.frontierWidthPerStep || []), activeBranches];
+            const stepBreakdown = mergeStepBreakdown(allPairBreakdowns, null);
             return {
                 ...state,
+                step: currentK,
+                frontier: allResults,
+                history: [...state.history, {
+                    k: currentK,
+                    target_digit: target_digit,
+                    branches: mapBranchesToHistory(allResults),
+                    stepBreakdown: stepBreakdown
+                }],
                 done: true,
                 activeBranches: activeBranches,
                 maxActiveBranches: maxActiveBranches,
@@ -161,10 +192,12 @@
             };
         }
         
+        const stepBreakdown = mergeStepBreakdown(allPairBreakdowns, null);
         const stepHistory = {
             k: currentK,
             target_digit: target_digit,
-            branches: mapBranchesToHistory(allResults)
+            branches: mapBranchesToHistory(allResults),
+            stepBreakdown: stepBreakdown
         };
         
         const activeBranches = allResults.length;
