@@ -1498,7 +1498,9 @@
             titleEl.textContent = 'Base ' + base + ' — Step-by-step computation breakdown';
             let bodyHtml = '';
             if (result.success && result.foundP != null) {
-                bodyHtml += '<p style="margin-bottom: 12px; color: #ffd700;">Solution: p = ' + result.foundP + ', q = ' + result.foundQ + '</p>';
+                const pBase = parseInt(result.foundP, 10).toString(base);
+                const qBase = parseInt(result.foundQ, 10).toString(base);
+                bodyHtml += '<p style="margin-bottom: 12px; color: #ffd700;">Solution: p = ' + result.foundP + ', q = ' + result.foundQ + ' [base ' + base + ': p = ' + pBase + ', q = ' + qBase + ']</p>';
             }
             if (history.length === 0) {
                 bodyHtml += '<p style="color: #888;">No step history available for this run.</p>';
