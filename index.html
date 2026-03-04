@@ -478,7 +478,7 @@
 
     <script src="https://scheduler.distributed.computer/dcp-client/dcp-client.js"></script>
     <script src="common.js"></script>
-    <script src="parallel_base_exploration.js"></script>
+    <script src="parallel_base_exploration.js?v=2"></script>
     <script>
         // Algorithm loader - dynamically loads the selected algorithm
         let currentAlgorithm = null;
@@ -1275,11 +1275,12 @@
                 let html = '<div style="margin-bottom: 15px;"><strong style="color: #8a2be2;">Final Results:</strong></div>';
                 if (results.winner) {
                     const w = results.winner.result;
-                    const widthArr = (w.frontierWidthPerStep && w.frontierWidthPerStep.length) ? w.frontierWidthPerStep : [];
+                    const widthArr = (w.frontierWidthPerStep && w.frontierWidthPerStep.length) ? w.frontierWidthPerStep : null;
+                    const widthLine = widthArr ? ('Width/step: [' + widthArr.join(', ') + ']') : (w.maxFrontierWidth != null ? 'Max width: ' + w.maxFrontierWidth : '');
                     html += `<div style="margin-bottom: 12px; padding: 10px; background: rgba(255, 215, 0, 0.2); border-radius: 8px; border: 2px solid #ffd700;">
                         <strong style="color: #ffd700;">🏆 Winner: Base ${results.winner.base}</strong><br>
                         p = ${w.foundP}, q = ${w.foundQ}<br>
-                        ${w.N_digits ? w.N_digits.length + ' steps' : ''} · Width/step: [${widthArr.join(', ')}]
+                        ${w.N_digits ? w.N_digits.length + ' steps' : ''}${widthLine ? ' · ' + widthLine : ''}
                     </div>`;
                 }
                 const widths = bases.map(b => results.results[b].maxFrontierWidth).filter(x => x != null && x !== undefined);
@@ -1303,13 +1304,14 @@
                         const badges = [];
                         if (bestTime) badges.push('<span style="font-size: 0.75em; color: #00ff7f;">⏱ best time</span>');
                         if (bestWidth) badges.push('<span style="font-size: 0.75em; color: #00ff7f;">📐 min width</span>');
-                        const widthArr = (result.frontierWidthPerStep && result.frontierWidthPerStep.length) ? result.frontierWidthPerStep : [];
+                        const widthArr = (result.frontierWidthPerStep && result.frontierWidthPerStep.length) ? result.frontierWidthPerStep : null;
+                        const widthLine = widthArr ? ('Width/step: [' + widthArr.join(', ') + ']') : (result.maxFrontierWidth != null ? 'Max width: ' + result.maxFrontierWidth : '');
                         const stepsLine = result.N_digits ? (result.N_digits.length + ' steps') : '';
                         html += `<div style="padding: 10px; background: rgba(138, 43, 226, 0.2); border-radius: 8px; border: 2px solid ${color}; min-width: 0${extraStyle}">
                             <strong>Base ${base}</strong> ${badges.length ? badges.join(' ') : ''}<br>
                             ${isSuccess ? '✓ Solution found' : isDone ? '✗ No solution' : 'Incomplete'}<br>
                             ${stepsLine}<br>
-                            Width/step: [${widthArr.join(', ')}]<br>
+                            ${widthLine}<br>
                             ${result.nodesVisited ? `Visited: ${result.nodesVisited}` : ''}<br>
                             ${result.nodesPruned ? `Pruned: ${result.nodesPruned}` : ''}<br>
                             ${result.elapsedTime ? `${result.elapsedTime}ms` : ''}
