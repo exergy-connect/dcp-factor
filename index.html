@@ -431,11 +431,37 @@
             border-radius: 4px;
             font-size: 0.85em;
             font-family: monospace;
+            cursor: default;
         }
-        #breakdownModal .pair-tag.eliminated {
-            background: rgba(255, 68, 68, 0.35);
+        #breakdownModal .pair-tag.rejected-ivi {
+            background: rgba(255, 120, 120, 0.5);
+            color: #ffcccc;
+            border: 1px solid #e06666;
+        }
+        #breakdownModal .pair-tag.rejected-carry {
+            background: rgba(220, 80, 80, 0.5);
+            color: #ffb3b3;
+            border: 1px solid #cc4444;
+        }
+        #breakdownModal .pair-tag.pruned-2 {
+            background: rgba(200, 60, 60, 0.55);
+            color: #ff9999;
+            border: 1px solid #b33;
+        }
+        #breakdownModal .pair-tag.pruned-3 {
+            background: rgba(180, 50, 50, 0.6);
             color: #ff8888;
-            border: 1px solid #ff4444;
+            border: 1px solid #a02828;
+        }
+        #breakdownModal .pair-tag.pruned-4 {
+            background: rgba(160, 40, 40, 0.65);
+            color: #ee7777;
+            border: 1px solid #8b1a1a;
+        }
+        #breakdownModal .pair-tag.pruned-5 {
+            background: rgba(140, 30, 30, 0.7);
+            color: #dd6666;
+            border: 1px solid #701010;
         }
         #breakdownModal .pair-tag.accepted {
             background: rgba(0, 191, 255, 0.2);
@@ -459,6 +485,44 @@
         }
         #breakdownModal .modal-close:hover {
             background: rgba(138, 43, 226, 0.3);
+        }
+        #breakdownModal .breakdown-graph {
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+        #breakdownModal .breakdown-graph svg {
+            display: block;
+        }
+        #breakdownModal .breakdown-graph .node-circle {
+            fill: rgba(0, 191, 255, 0.25);
+            stroke: rgba(0, 191, 255, 0.6);
+            stroke-width: 2;
+        }
+        #breakdownModal .breakdown-graph .node-circle.golden {
+            fill: rgba(255, 215, 0, 0.4);
+            stroke: #ffd700;
+            stroke-width: 2.5;
+        }
+        #breakdownModal .breakdown-graph .edge {
+            fill: none;
+            stroke: rgba(0, 191, 255, 0.35);
+            stroke-width: 1;
+        }
+        #breakdownModal .breakdown-graph .edge.golden {
+            stroke: rgba(255, 215, 0, 0.8);
+            stroke-width: 2;
+        }
+        #breakdownModal .breakdown-graph .node-label {
+            font-size: 10px;
+            fill: #fff;
+            text-anchor: middle;
+            font-family: monospace;
+        }
+        #breakdownModal .breakdown-graph .node-counts {
+            font-size: 8px;
+            fill: #88ddff;
+            text-anchor: middle;
+            font-family: sans-serif;
         }
     </style>
 </head>
@@ -1472,14 +1536,14 @@
             }
         }
 
-        const breakdownStatusLabels = {
-            rejected_ivi: 'IVI/carry',
-            rejected_carry: 'carry',
-            pruned_2: 'termination',
-            pruned_3: 'overshoot',
-            pruned_4: 'sqrt',
-            pruned_5: 'growth',
-            accepted: 'accepted'
+        const breakdownStatusTitles = {
+            rejected_ivi: 'Rejected: digit / IVI constraint (sum does not match target digit or remainder not divisible by base)',
+            rejected_carry: 'Rejected: carry out of range or invalid for last digit',
+            pruned_2: 'Pruned: exact termination (final product \u2260 N, or factor \u2264 1)',
+            pruned_3: 'Pruned: immediate overshoot (P\u00d7Q > N)',
+            pruned_4: 'Pruned: sqrt-based bound (P > \u221aN)',
+            pruned_5: 'Pruned: growth envelope (max completion cannot reach N)',
+            accepted: 'Accepted: feasible branch kept'
         };
 
         function showBreakdown(base) {
@@ -1506,27 +1570,116 @@
                 bodyHtml += '<p style="color: #888;">No step history available for this run.</p>';
             } else {
                 const solutionPath = (result.solutionPath && result.solutionPath.length) ? result.solutionPath : [];
+                var uniquePairs = [];
+                var branchToPairIdx = [];
+                history.forEach(function(step, s) {
+                    var seen = {}, list = [], bidxToU = [];
+                    (step.branches || []).forEach(function(b) {
+                        var key = b.pk + ',' + b.qk;
+                        if (seen[key] === undefined) {
+                            seen[key] = list.length;
+                            list.push({ pk: b.pk, qk: b.qk });
+                        }
+                        bidxToU.push(seen[key]);
+                    });
+                    uniquePairs[s] = list;
+                    branchToPairIdx[s] = bidxToU;
+                });
+                var maxBranches = 0;
+                uniquePairs.forEach(function(list) { maxBranches = Math.max(maxBranches, list.length); });
+                var inCounts = [], outCounts = [];
+                for (var s = 0; s < history.length; s++) {
+                    var n = uniquePairs[s].length;
+                    inCounts[s] = [];
+                    for (var u = 0; u < n; u++) inCounts[s][u] = 0;
+                    (history[s].branches || []).forEach(function(_, i) {
+                        var u = branchToPairIdx[s][i];
+                        if (u !== undefined) inCounts[s][u]++;
+                    });
+                    outCounts[s] = [];
+                    for (u = 0; u < n; u++) outCounts[s][u] = 0;
+                    if (s < history.length - 1) {
+                        (history[s + 1].branches || []).forEach(function(b) {
+                            var pi = b.parentIdx;
+                            if (pi == null || pi < 0) return;
+                            var pu = branchToPairIdx[s][pi];
+                            if (pu !== undefined) outCounts[s][pu]++;
+                        });
+                    }
+                }
+                var pathIndices = [];
+                if (solutionPath.length && history.length > 0) {
+                    var lastBranches = history[history.length - 1].branches || [];
+                    var solIdx = lastBranches.findIndex(function(b) { return b.isSolution; });
+                    if (solIdx >= 0) {
+                        pathIndices[history.length - 1] = solIdx;
+                        for (s = history.length - 2; s >= 0; s--) {
+                            pathIndices[s] = (history[s + 1].branches || [])[pathIndices[s + 1]].parentIdx;
+                        }
+                    }
+                }
+                var pathPairIdx = [];
+                for (s = 0; s < history.length; s++) {
+                    if (pathIndices[s] !== undefined && branchToPairIdx[s])
+                        pathPairIdx[s] = branchToPairIdx[s][pathIndices[s]];
+                }
+                var rowHeight = 70, colWidth = Math.max(52, maxBranches > 0 ? 400 / maxBranches : 52), nodeR = 14, margin = 24;
+                var graphW = maxBranches * colWidth + 2 * margin, graphH = history.length * rowHeight + 2 * margin;
+                function nodeX(stepIdx, pairIdx) {
+                    var n = uniquePairs[stepIdx].length;
+                    var startX = (graphW - n * colWidth) / 2;
+                    return startX + pairIdx * colWidth + colWidth / 2;
+                }
+                function nodeY(stepIdx) {
+                    return margin + stepIdx * rowHeight + rowHeight / 2;
+                }
+                bodyHtml += '<div class="breakdown-graph"><svg width="' + graphW + '" height="' + graphH + '" viewBox="0 0 ' + graphW + ' ' + graphH + '">';
+                var drawnEdges = {};
+                for (s = 0; s < history.length - 1; s++) {
+                    (history[s + 1].branches || []).forEach(function(b, j) {
+                        var pi = b.parentIdx;
+                        if (pi == null || pi < 0) return;
+                        var pu = branchToPairIdx[s][pi], pv = branchToPairIdx[s + 1][j];
+                        if (pu === undefined || pv === undefined) return;
+                        var key = s + ',' + pu + ',' + (s + 1) + ',' + pv;
+                        if (drawnEdges[key]) return;
+                        drawnEdges[key] = true;
+                        var x0 = nodeX(s, pu), y0 = nodeY(s);
+                        var x1 = nodeX(s + 1, pv), y1 = nodeY(s + 1);
+                        var isGolden = (pathPairIdx[s] === pu && pathPairIdx[s + 1] === pv);
+                        bodyHtml += '<path class="edge' + (isGolden ? ' golden' : '') + '" d="M' + x0 + ',' + y0 + ' C' + x0 + ',' + (y0 + (y1 - y0) / 2) + ' ' + x1 + ',' + (y1 - (y1 - y0) / 2) + ' ' + x1 + ',' + y1 + '"/>';
+                    });
+                }
+                history.forEach(function(step, s) {
+                    var pairs = uniquePairs[s] || [];
+                    pairs.forEach(function(pair, u) {
+                        var cx = nodeX(s, u), cy = nodeY(s);
+                        var out = (outCounts[s] && outCounts[s][u] !== undefined) ? outCounts[s][u] : 0;
+                        var inCount = (inCounts[s] && inCounts[s][u] !== undefined) ? inCounts[s][u] : 0;
+                        var isGolden = (pathPairIdx[s] === u);
+                        bodyHtml += '<circle class="node-circle' + (isGolden ? ' golden' : '') + '" cx="' + cx + '" cy="' + cy + '" r="' + nodeR + '"/>';
+                        bodyHtml += '<text class="node-label" x="' + cx + '" y="' + (cy - 5) + '">(' + pair.pk + ',' + pair.qk + ')</text>';
+                        bodyHtml += '<text class="node-counts" x="' + cx + '" y="' + (cy + 10) + '">\u2191' + inCount + ' \u2193' + out + '</text>';
+                    });
+                });
+                bodyHtml += '</svg></div>';
                 history.forEach(function(step) {
                     const k = step.k;
                     const target = step.target_digit;
                     const sb = step.stepBreakdown;
                     const pairs = (sb && sb.pairs) ? sb.pairs : [];
                     const golden = solutionPath.find(function(entry) { return entry.k === k; }) || (sb && sb.golden) || null;
-                    const feasiblePairs = pairs.filter(function(p) { return p.status === 'accepted'; });
-                    const feasibleArr = feasiblePairs.map(function(p) { return '(' + p.pk + ',' + p.qk + ')'; }).join(', ');
                     bodyHtml += '<div class="step-block">';
                     bodyHtml += '<h3>Step ' + k + ' — target digit (base ' + base + '): ' + target + '</h3>';
-                    bodyHtml += '<p class="feasible-summary" style="margin: 0 0 8px 0; font-size: 0.9em; color: #88ddff;">Feasible pairs (' + feasiblePairs.length + '): [' + feasibleArr + ']</p>';
                     bodyHtml += '<div class="pairs-row">';
                     pairs.forEach(function(p) {
                         const isGolden = golden && p.pk === golden.pk && p.qk === golden.qk;
                         const isEliminated = p.status !== 'accepted';
-                        let label = '(' + p.pk + ',' + p.qk + ')';
-                        if (isEliminated) {
-                            label += ' ' + (breakdownStatusLabels[p.status] || p.status);
-                        }
-                        const cls = isGolden ? 'pair-tag golden' : (isEliminated ? 'pair-tag eliminated' : 'pair-tag accepted');
-                        bodyHtml += '<span class="' + cls + '">' + label + '</span>';
+                        const label = '(' + p.pk + ',' + p.qk + ')';
+                        const statusClass = isEliminated ? ('pair-tag ' + p.status.replace(/_/g, '-')) : 'pair-tag accepted';
+                        const cls = isGolden ? 'pair-tag golden' : statusClass;
+                        const title = breakdownStatusTitles[p.status] || p.status;
+                        bodyHtml += '<span class="' + cls + '" title="' + title.replace(/"/g, '&quot;') + '">' + label + '</span>';
                     });
                     bodyHtml += '</div></div>';
                 });
