@@ -29,6 +29,7 @@
         const {
             loadAlgorithm,
             initializeAlgorithm,
+            getTestCaseInputs,
             checkSolution,
             buildSolutionPath,
             drawVisualization,
@@ -46,26 +47,62 @@
         }
 
         dcpLink.addEventListener('click', async function() {
-            const p = parseInt(document.getElementById('primeP').value);
-            const q = parseInt(document.getElementById('primeQ').value);
+            const { N } = getTestCaseInputs ? getTestCaseInputs() : { N: null };
             const algorithmSelect = document.getElementById('algorithmSelect');
             const selectedAlgorithm = algorithmSelect.value;
             
-            if (!p || !q) {
-                alert('Please select primes for p and q first');
+            if (!N) {
+                alert('Please select a test case or choose primes for p and q.');
                 return;
             }
             
-            // Check if dcp-client is available (may need to be loaded separately)
+            // Load dcp-client on demand so a broken CDN doesn't break the page
             if (typeof dcp === 'undefined') {
-                // Try to load dcp-client from CDN or show helpful message
-                alert('DCP client not available in browser.\n\n' +
-                      'To use DCP, you need to:\n' +
-                      '1. Use Node.js backend with dcp-client package, OR\n' +
-                      '2. Load dcp-client via a bundler (webpack/rollup), OR\n' +
-                      '3. Use the Node.js script: node dcp-client.js\n\n' +
-                      'For now, the algorithm will run locally in the browser.');
-                return;
+                let done = false;
+                let loadError = null;
+                let resolveLoad = null;
+                let rejectLoad = null;
+                const finish = (err, resolve, reject) => {
+                    if (done) return;
+                    done = true;
+                    window.removeEventListener('error', onError);
+                    if (err) loadError = err;
+                    if (reject) reject(loadError || new Error('DCP failed'));
+                };
+                const onError = function(msg, url, lineNo, colNo, err) {
+                    finish(err || new Error(msg || 'DCP script error'), resolveLoad, rejectLoad);
+                    return true;
+                };
+                window.addEventListener('error', onError);
+                try {
+                    await new Promise((resolve, reject) => {
+                        resolveLoad = resolve;
+                        rejectLoad = reject;
+                        const timeout = setTimeout(() => {
+                            finish(new Error('timeout'), resolve, reject);
+                        }, 8000);
+                        const s = document.createElement('script');
+                        s.src = 'https://scheduler.distributed.computer/dcp-client/dcp-client.js';
+                        s.onload = () => {
+                            clearTimeout(timeout);
+                            if (done) return;
+                            done = true;
+                            window.removeEventListener('error', onError);
+                            (typeof dcp !== 'undefined' ? resolve : reject)(loadError);
+                        };
+                        s.onerror = () => {
+                            clearTimeout(timeout);
+                            finish(new Error('DCP script failed to load'), resolve, reject);
+                        };
+                        document.head.appendChild(s);
+                    });
+                } catch (e) {
+                    loadError = loadError || e;
+                }
+                if (loadError || typeof dcp === 'undefined') {
+                    alert('DCP client not available or failed to initialize.\n\nRun the algorithm locally (Start Factorization) instead.');
+                    return;
+                }
             }
             
             // Only pruning algorithm is supported for DCP
@@ -84,8 +121,8 @@
             status.className = 'status processing';
             
             try {
-                // Initialize algorithm state
-                let state = initializeAlgorithm(p, q);
+                // Initialize algorithm state from N
+                let state = initializeAlgorithm(N);
                 state.algorithm = 'pruning';
                 
                 status.textContent = `Running on DCP: Step 1/${state.N_digits.length}...`;

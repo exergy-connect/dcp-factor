@@ -413,10 +413,8 @@ function workFunction(input) {
  *   - step: Current step counter (0 initially)
  *   - history: Empty history array
  */
-function initializeAlgorithm(p, q) {
-    const p_big = typeof p === 'bigint' ? p : BigInt(p);
-    const q_big = typeof q === 'bigint' ? q : BigInt(q);
-    const N_big = p_big * q_big;
+function initializeAlgorithm(N) {
+    const N_big = typeof N === 'bigint' ? N : BigInt(N);
     const N_digits = N_big.toString().split('').reverse().map(Number);
     
     // #5. Square Root Envelope Pruning: Precompute sqrtN once
@@ -424,8 +422,8 @@ function initializeAlgorithm(p, q) {
     
     const N_display = N_big <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(N_big) : N_big.toString();
     return {
-        p: p_big <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(p_big) : p_big.toString(),
-        q: q_big <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(q_big) : q_big.toString(),
+        p: null,
+        q: null,
         N: N_display,
         N_big: N_big,
         sqrtN: sqrtN,
@@ -523,6 +521,11 @@ function stepAlgorithm(state) {
         
         candidates.forEach(result => allResults.push({ ...result, parentIdx }));
     });
+    
+    // Cap frontier size to avoid UI freeze when branching explodes (e.g. small N)
+    if (state.maxFrontierSize != null && allResults.length > state.maxFrontierSize) {
+        allResults = allResults.slice(0, state.maxFrontierSize);
+    }
     
     // Update cumulative pruning statistics
     const updatedPruningStats = { ...state.pruningStats };

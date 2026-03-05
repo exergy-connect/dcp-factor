@@ -541,7 +541,12 @@
                 <select id="primeQ"></select>
             </div>
             <div class="control-group">
-                <label><input type="checkbox" id="rsa59Check" title="N = RSA-59 (59 digits), p and q each 30 digits"> Use N = RSA-59</label>
+                <label for="testCaseSelect">Test case:</label>
+                <select id="testCaseSelect">
+                    <option value="custom">Custom</option>
+                    <option value="rsa59">RSA-59 (59 digits)</option>
+                    <option value="k">K = 26 661 462 837 357 923</option>
+                </select>
             </div>
             <div class="control-group">
                 <label for="maxStepsInput">Max steps:</label>
@@ -660,7 +665,6 @@
     
     <div class="copyright">© Exergy ∞ LLC</div>
 
-    <script src="https://scheduler.distributed.computer/dcp-client/dcp-client.js"></script>
     <script src="common.js"></script>
     <script src="parallel_base_exploration.js?v=2"></script>
     <script>
@@ -1254,12 +1258,28 @@
         var RSA59_N = '71641520761751435455133616475667090434063332228247871795429';
         var RSA59_p = '200429218120815554269743635437';
         var RSA59_q = '357440504101388365610785389017';
+        var K_N = '26661462837357923';
+
+        function getTestCaseInputs() {
+            const sel = document.getElementById('testCaseSelect');
+            const value = sel ? sel.value : 'custom';
+            if (value === 'rsa59') return { N: RSA59_N };
+            if (value === 'k') return { N: K_N };
+            const p = document.getElementById('primeP').value;
+            const q = document.getElementById('primeQ').value;
+            if (!p || !q) return { N: null };
+            return { N: String(BigInt(p) * BigInt(q)) };
+        }
 
         async function startVisualization() {
             const startBtn = document.getElementById('startBtn');
             const algorithmSelect = document.getElementById('algorithmSelect');
             const selectedAlgorithm = algorithmSelect.value;
-            const useRSA59 = document.getElementById('rsa59Check') && document.getElementById('rsa59Check').checked;
+            const { N } = getTestCaseInputs();
+            if (!N) {
+                alert('Please select a test case or choose primes for p and q.');
+                return;
+            }
             
             // Load algorithm if changed
             if (currentAlgorithm !== selectedAlgorithm) {
@@ -1288,16 +1308,12 @@
                 return;
             }
             
-            const p = useRSA59 ? RSA59_p : document.getElementById('primeP').value;
-            const q = useRSA59 ? RSA59_q : document.getElementById('primeQ').value;
-
             isRunning = true;
-            algorithmState = initializeAlgorithm(p, q);
-            if (useRSA59) {
-                var maxStepsEl = document.getElementById('maxStepsInput');
-                var maxSteps = maxStepsEl ? Math.max(1, parseInt(maxStepsEl.value, 10) || 5) : 5;
-                algorithmState.maxSteps = maxSteps;
-            }
+            algorithmState = initializeAlgorithm(N);
+            var maxStepsEl = document.getElementById('maxStepsInput');
+            var maxSteps = maxStepsEl ? Math.max(1, parseInt(maxStepsEl.value, 10) || 5) : 5;
+            algorithmState.maxSteps = maxSteps;
+            algorithmState.maxFrontierSize = 2000; // cap branches per step to avoid UI freeze
             // Store algorithm type for chart display
             algorithmState.algorithm = selectedAlgorithm;
             const status = document.getElementById('status');
@@ -1405,12 +1421,9 @@
         }
 
         async function runParallelBasesExploration() {
-            const useRSA59 = document.getElementById('rsa59Check') && document.getElementById('rsa59Check').checked;
-            const p = useRSA59 ? RSA59_p : document.getElementById('primeP').value;
-            const q = useRSA59 ? RSA59_q : document.getElementById('primeQ').value;
-            
-            if (!p || !q) {
-                alert('Please select primes for p and q first, or check Use N = RSA-59');
+            const { N } = getTestCaseInputs();
+            if (!N) {
+                alert('Please select a test case or choose primes for p and q.');
                 return;
             }
             
@@ -1436,7 +1449,7 @@
             status.className = 'status processing';
             
             try {
-                const results = await runParallelBases(p, q, bases, (progress) => {
+                const results = await runParallelBases(N, bases, (progress) => {
                     // Update progress display (tiles)
                     let html = '<div style="margin-bottom: 15px;"><strong style="color: #8a2be2;">Progress:</strong></div>';
                     html += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;">';
@@ -1464,7 +1477,7 @@
                     }
                     html += '</div>';
                     resultsContent.innerHTML = html;
-                }, useRSA59 ? (function() { var el = document.getElementById('maxStepsInput'); return { maxSteps: Math.max(1, parseInt(el && el.value, 10) || 5) }; })() : undefined);
+                }, (function() { var el = document.getElementById('maxStepsInput'); return { maxSteps: Math.max(1, parseInt(el && el.value, 10) || 5) }; })());
                 
                 // Display final results (tiles)
                 let html = '<div style="margin-bottom: 15px;"><strong style="color: #8a2be2;">Final Results:</strong></div>';
@@ -1739,6 +1752,7 @@
                 initDCPIntegration({
                     loadAlgorithm: loadAlgorithm,
                     initializeAlgorithm: initializeAlgorithm,
+                    getTestCaseInputs: getTestCaseInputs,
                     checkSolution: checkSolution,
                     buildSolutionPath: buildSolutionPath,
                     drawVisualization: drawVisualization,

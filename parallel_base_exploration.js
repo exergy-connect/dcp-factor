@@ -17,22 +17,21 @@
     /**
      * Initializes algorithm state for a specific base
      * 
-     * @param {number} p - First prime factor
-     * @param {number} q - Second prime factor
+     * @param {string|bigint} N - Semiprime to factor
      * @param {number} base - Base for computation
      * @returns {Object} Initial algorithm state
      */
-    function initializeAlgorithmBase(p, q, base) {
-        const N = BigInt(p) * BigInt(q);
-        const N_digits = numberToBaseDigits(N, base);
-        const sqrtN = integerSqrt(N);
+    function initializeAlgorithmBase(N, base) {
+        const N_big = typeof N === 'bigint' ? N : BigInt(N);
+        const N_digits = numberToBaseDigits(N_big, base);
+        const sqrtN = integerSqrt(N_big);
         
         return {
             base: base,
-            p: p,
-            q: q,
-            N: Number(N),
-            N_big: N,
+            p: null,
+            q: null,
+            N: N_big <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(N_big) : N_big.toString(),
+            N_big: N_big,
             sqrtN: sqrtN,
             N_digits: N_digits,
             frontier: [{
@@ -224,14 +223,13 @@
     /**
      * Runs the algorithm for a single base until completion or solution found
      * 
-     * @param {number} p - First prime factor
-     * @param {number} q - Second prime factor
+     * @param {string|bigint} N - Semiprime to factor
      * @param {number} base - Base to use
      * @param {Function} onProgress - Optional callback for progress updates
      * @returns {Promise<Object>} Final algorithm state
      */
-    async function runAlgorithmForBase(p, q, base, onProgress, opts) {
-        let state = initializeAlgorithmBase(p, q, base);
+    async function runAlgorithmForBase(N, base, onProgress, opts) {
+        let state = initializeAlgorithmBase(N, base);
         if (opts && opts.maxSteps != null) state.maxSteps = opts.maxSteps;
         
         while (!state.done && !state.success && state.step < state.N_digits.length) {
@@ -261,17 +259,16 @@
     /**
      * Runs the algorithm with multiple bases in parallel
      * 
-     * @param {number} p - First prime factor
-     * @param {number} q - Second prime factor
+     * @param {string|bigint} N - Semiprime to factor
      * @param {number[]} bases - Array of bases to explore (e.g., [8, 10, 16])
      * @param {Function} onProgress - Optional callback for progress updates
      * @returns {Promise<Object>} Results object with results for each base
      */
-    async function runParallelBases(p, q, bases, onProgress, opts) {
+    async function runParallelBases(N, bases, onProgress, opts) {
         const results = {};
         const promises = bases.map(async (base) => {
             try {
-                const result = await runAlgorithmForBase(p, q, base, (progress) => {
+                const result = await runAlgorithmForBase(N, base, (progress) => {
                     if (onProgress) {
                         onProgress({
                             base: base,
