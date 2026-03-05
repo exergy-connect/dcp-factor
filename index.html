@@ -556,6 +556,7 @@
                 <label for="algorithmSelect">Algorithm:</label>
                 <select id="algorithmSelect">
                     <option value="basic">Basic (No Pruning)</option>
+                    <option value="basic-wasm">Basic (WASM)</option>
                     <option value="pruning" selected>Pruning (Global Feasibility)</option>
                 </select>
             </div>
@@ -696,31 +697,42 @@
         function loadAlgorithm(algorithmName) {
             return ensureCommonLoaded().then(() => {
                 return new Promise((resolve, reject) => {
-                    // Remove old script if exists and clear old functions
                     const oldScript = document.getElementById('algorithmScript');
-                    if (oldScript) {
-                        oldScript.remove();
-                    }
-                    
-                    // Clear old algorithm functions from window to avoid conflicts
+                    if (oldScript) oldScript.remove();
                     delete window.initializeAlgorithm;
                     delete window.stepAlgorithm;
-                    
+                    window.__ivi_wasm_workFunction = null;
+
+                    var scriptSrc = 'pruning_algorithm.js';
+                    if (algorithmName === 'basic') scriptSrc = 'basic_algorithm.js';
+                    else if (algorithmName === 'basic-wasm') scriptSrc = 'basic_wasm_algorithm.js';
+
                     const script = document.createElement('script');
                     script.id = 'algorithmScript';
-                    script.src = algorithmName === 'basic' ? 'basic_algorithm.js' : 'pruning_algorithm.js';
-                    script.onload = () => {
-                        // Functions should be available globally
-                        if (typeof window.initializeAlgorithm === 'function' && typeof window.stepAlgorithm === 'function') {
-                            initializeAlgorithm = window.initializeAlgorithm;
-                            stepAlgorithm = window.stepAlgorithm;
-                            currentAlgorithm = algorithmName;
-                            resolve();
-                        } else {
+                    script.src = scriptSrc;
+                    script.onload = function() {
+                        if (typeof window.initializeAlgorithm !== 'function' || typeof window.stepAlgorithm !== 'function') {
                             reject(new Error('Algorithm functions not found'));
+                            return;
+                        }
+                        initializeAlgorithm = window.initializeAlgorithm;
+                        stepAlgorithm = window.stepAlgorithm;
+                        currentAlgorithm = algorithmName;
+                        if (algorithmName === 'basic-wasm') {
+                            import('./pkg/ivi_wasm.js').then(function(mod) {
+                                return mod.default();
+                            }).then(function(wasmModule) {
+                                window.__ivi_wasm_workFunction = function(input) { return wasmModule.compute_next_states(input); };
+                                resolve();
+                            }).catch(function(e) {
+                                console.warn('WASM not loaded, using JS fallback:', e.message);
+                                resolve();
+                            });
+                        } else {
+                            resolve();
                         }
                     };
-                    script.onerror = () => reject(new Error('Failed to load algorithm'));
+                    script.onerror = function() { reject(new Error('Failed to load algorithm')); };
                     document.head.appendChild(script);
                 });
             });
