@@ -1,22 +1,22 @@
-# Φᵈᶜᵖ: Factoring the Universe through the Web of the Adjacent Possible
+# Φᵈᶜᵖ: Exploring Algorithmic Structure in Integer Factorization
 
-**Φᵈᶜᵖ** (Phi-DCP) is a revolutionary approach to integer factorization that combines **Integer Vector Inversion (IVI)** with the **Distributive Compute Protocol (DCP)** to achieve linear-time factorization of semiprimes through decentralized computation.
+**Φᵈᶜᵖ** (Phi-DCP) is an experimental framework that explores **Integer Vector Inversion (IVI)**—a digit-propagation formulation of semiprime factorization—in combination with the **Distributive Compute Protocol (DCP)** for decentralized execution. The project investigates whether the *structure* of the IVI recurrence admits bounded branching and what that implies for complexity.
 
 🌐 **[Try it live →](https://exergy-connect.github.io/dcp-factor/)**
 
 ## Overview
 
-Traditional factorization methods like the General Number Field Sieve (GNFS) require massive computational resources and sub-exponential time. Φᵈᶜᵖ transforms this problem by:
+Established methods such as the General Number Field Sieve (GNFS) have sub-exponential complexity and require large-scale resources. This project examines an alternative *structural* view:
 
-1. **Reframing factorization as digit propagation** - Instead of searching the exponential space of possible primes, we solve one digit at a time from least to most significant
-2. **Distributing across a global network** - Each digit position becomes a "ring" in an expanding web, processed by idle processors worldwide
-3. **Achieving linear complexity** - Through the IVI empirical conjecture (50-state bound), we reduce complexity from exponential to O(n)
+1. **Factorization as digit propagation** — Reformulate $N = p \cdot q$ as a digit-by-digit recurrence (IVI); explore one digit position at a time from least to most significant instead of searching the full space of candidates.
+2. **Distribution via DCP** — Map each digit position to a layer of work that can be farmed out to many workers; study how frontier size and network shape interact.
+3. **Complexity as an open question** — If the number of admissible digit pairs per position were bounded by a constant (e.g. the empirical “50-state” bound), total work would scale linearly in the number of digits. That bound is *empirically observed* and *conjectural*; the algorithm’s value is in exploring whether such structure holds and how pruning affects the search.
 
 ## Core Concepts
 
 ### Integer Vector Inversion (IVI)
 
-IVI reformulates factorization ($N = p \cdot q$) as a digit-by-digit propagation problem. The mathematical engine is a bounded Diophantine recurrence relation:
+IVI is a formulation of factorization ($N = p \cdot q$) as a digit-by-digit propagation problem. The core is a Diophantine recurrence:
 
 $$\sum_{i=1}^{k} p_i q_{k-i+1} + c_k = n_k + 10c_{k+1}$$
 
@@ -25,17 +25,17 @@ Where:
 - $c_k$ is the carry from the previous position
 - $n_k$ is the target digit of the semiprime $N$
 
-### The 50-State Bound
+### The 50-State Bound (Empirical Conjecture)
 
-The key insight of IVI is the **Empirical Conjecture**: at any digit position $k$, there are at most **50 admissible digit pairs** that satisfy the equation and allow carry propagation. This bound is independent of the semiprime size, reducing complexity from exponential to linear.
+In practice, at each digit position $k$ only a subset of the $b^2$ digit pairs satisfy the IVI equation and carry constraint. Empirically, in base 10 this subset is often **at most ~50 pairs** per position; the same order of magnitude appears across many tested semiprimes. If this bound held *in general* and independently of $N$, the recurrence would yield **O(n)** work in the number of digits. This is an **empirical observation and conjecture**, not a proven theorem; the implementation exists partly to test how often and under what conditions the branching stays bounded.
 
 ### Distributive Compute Protocol (DCP)
 
-DCP enables the distribution of IVI computation across a global network of idle processors. Each valid digit-pair state becomes a branch in a "cosmic tree" that expands horizontally across thousands of devices.
+DCP is used to distribute IVI work across many workers. Each valid digit-pair state is a branch that can be processed on a separate node; the scheduler manages frontier size and look-ahead depth.
 
-### The Adjacent Possible
+### The Adjacent Possible (Metaphor)
 
-Inspired by Stuart Kauffman's biological theory, the "Adjacent Possible" describes all states reachable from the current configuration. At each digit $k$, the universe expands into ~50 potential futures. Most are mathematical dead ends, but one path—the **Golden Path**—maintains perfect carry equilibrium until the final digit.
+Borrowing from Stuart Kauffman’s idea of the “adjacent possible”: at each digit $k$, the recurrence defines the set of next admissible states from the current one. In that sense, the search explores “adjacent” configurations step by step. One path—sometimes called the **Golden Path**—corresponds to a full factorization (carry propagation consistent to the end); most branches are pruned when they violate feasibility bounds.
 
 ### Base Selection
 
@@ -61,18 +61,18 @@ The algorithm can explore multiple bases simultaneously to discover interference
 - **Reveals patterns**: By comparing performance across bases, you can observe how different number representations affect the search space
 - **Optimizes selection**: The results help identify which base works best for similar numbers
 
-This feature enables empirical discovery of base-dependent performance characteristics, revealing how the "Adjacent Possible" expands differently across different number representations.
+This feature supports empirical comparison of base-dependent branching and runtime, i.e. how the recurrence’s admissible set varies with the representation base.
 
 ## How It Works
 
-### The Expanding Web
+### Step-by-Step Structure
 
-1. **Initialization**: Start with digit position $k=1$ (least significant digit), empty histories, and zero carry
-2. **Expansion**: For each position $k$, workers explore all $b^2$ possible digit pairs $(p_k, q_k)$ where $b$ is the chosen base (e.g., 100 pairs for base 10, 256 for base 16)
-3. **Filtering**: Only pairs satisfying the IVI constraint are kept (typically ≤50 per position in base 10)
-4. **Propagation**: Valid states become the frontier for position $k+1$
-5. **Pruning**: Branches that reach impossible states are automatically discarded
-6. **Termination**: The Golden Path is found when $k > n$ and final carry $c_{n+1} = 0$
+1. **Initialization**: Digit position $k=1$ (least significant), empty digit histories, carry $c_1 = 0$.
+2. **Expansion**: For position $k$, consider all $b^2$ digit pairs $(p_k, q_k)$; in base 10 that’s 100 pairs per state, 256 in base 16.
+3. **Filtering**: Keep only pairs that satisfy the IVI recurrence and carry update; in base 10 the number kept is often ≤50 per state (empirically).
+4. **Propagation**: Those states form the frontier for $k+1$.
+5. **Pruning**: States that fail `globalFeasible()` are discarded and not extended.
+6. **Termination**: A solution is found when all digits are processed and final carry $c_{n+1} = 0$.
 
 ### State Structure
 
@@ -90,9 +90,9 @@ Each state in the frontier is a compact JSON tuple:
 
 ### Topology
 
-- **Expansion**: Each digit position acts as a "ring" in an expanding universe
-- **Pruning**: Dead-end branches are immediately recycled
-- **Persistence**: States are stored as discrete tuples, enabling distribution across time and space
+- **Expansion**: Each digit position is one layer; the frontier is the set of states at that layer.
+- **Pruning**: Branches that fail global feasibility are discarded as soon as they are detected.
+- **Persistence**: States are self-contained tuples, so they can be sent to workers and merged without shared memory.
 
 ## Global Feasibility Pruning: Mathematical Soundness
 
@@ -229,7 +229,7 @@ The following are explicitly **not** used, as they violate mathematical rigor:
 - **Time per node**: $O(1)$ - All bound computations are constant time
 - **Space**: $O(1)$ - Only current state values needed, no temporary arrays
 - **Cache efficiency**: Powers of 10 are cached, avoiding repeated exponentiation
-- **Pruning effectiveness**: Typically eliminates 90-99% of candidate branches
+- **Pruning effectiveness**: In practice, a large fraction of candidate branches are eliminated (metrics are logged for analysis)
 
 ### Instrumentation
 
@@ -240,16 +240,16 @@ The algorithm tracks pruning effectiveness:
 
 These metrics allow comparison of pruning effectiveness across different numbers and bases.
 
-## Elastic Scheduler Architecture: The Adaptive Core of Φᵈᶜᵖ
+## Elastic Scheduler: Adapting Look-Ahead to Frontier Size
 
-By making $m$ (the look-ahead depth) a scheduler-controlled parameter, the IVI algorithm evolves from a static sequence into an **Elastic Search Web**. This architecture allows the system to balance the "width" of the branch search with the "depth" of local computation, optimizing for the global network's current throughput.
+The look-ahead depth $m$ is a scheduler parameter: each task can advance up to $m$ digit positions before returning. Tuning $m$ trades off per-worker cost (and latency) against the number of round-trips and the width of the frontier.
 
-### The Dynamic Feedback Loop
+### Feedback Based on Frontier Density
 
-The Elastic Scheduler monitors the **Frontier Density**—the number of active valid branches—to determine the optimal $m$ for the next pulse.
+The scheduler can adjust $m$ using the current number of active branches (frontier size):
 
-* **Expansion Phase (Small $m$):** Used when the number of active branches is low. By reducing $m$, the scheduler forces more frequent check-ins, allowing the web to "fan out" and discover new adjacent possibilities across more workers.
-* **Pruning Phase (Large $m$):** Used when the frontier becomes too wide. By increasing $m$, the scheduler delegates more "logical work" to the workers. This forces branches to survive a longer mathematical gauntlet before reporting back, naturally pruning the "web" and reducing network congestion.
+- **Small $m$** when the frontier is small: more frequent syncs, more chances to grow the frontier across workers.
+- **Large $m$** when the frontier is large: fewer round-trips, more pruning per task so that only branches that survive several steps return.
 
 ### Implementation: The Task Payload
 
@@ -281,9 +281,9 @@ As $m$ increases, the number of required network round-trips for an RSA-scale nu
 | **10** | 62 | Medium | Low |
 | **20** | 31 | High | **Optimal** |
 
-### The "Golden Path" Convergence
+### Convergence at the Most Significant Digit
 
-The ultimate goal of the Elastic Scheduler is to navigate the **Adjacent Possible** until only the Golden Path remains. By the time the web reaches the MSD (Most Significant Digit), the constraints are so tight that $m$ can be maximized to rapidly close the gap and verify the final carry $c_{n+1}=0$.
+Near the end of the recurrence, the number of surviving branches often drops. The scheduler can increase $m$ there to reduce round-trips and quickly check the final carry $c_{n+1}=0$ for any candidate solution.
 
 ## Implementation
 
@@ -340,27 +340,27 @@ function workFunction(input) {
    - Collect results (valid next states)
    - Flatten into new frontier
    - Check for termination (final carry = 0)
-3. Return factors $p$ and $q$ when Golden Path found
+3. Return factors $p$ and $q$ when a full solution is found
 
 ## Complexity Analysis
 
-- **Time Complexity**: $O(n)$ - Linear in the number of digits
-- **Space Complexity**: $O(1)$ per worker - Only current state needed
-- **Network Latency**: Minimized by bundling multiple digit tests per work unit
-- **Parallelism**: Up to ~50 workers per digit position (bounded by IVI conjecture)
+- **Time complexity**: *Conditional* on the branching bound. If the number of admissible pairs per position is $O(1)$, then total work is **O(n)** in the number of digits. Without a proven bound, complexity remains open; the implementation is intended to gather evidence.
+- **Space per worker**: $O(1)$ — only the current state and fixed-size buffers.
+- **Network**: Look-ahead $m$ reduces round-trips (e.g. $n/m$ pulses for $n$ digits).
+- **Parallelism**: Bounded by frontier width; empirically often on the order of tens of branches per layer in base 10.
 
-## Paradigm Shift
+## Algorithmic Contrast
 
-| Feature | Traditional (GNFS) | Φᵈᶜᵖ (IVI + DCP) |
-|---------|-------------------|-------------------|
-| **Logic** | Global Search | Local Digit Propagation |
-| **Complexity** | Sub-exponential | Linear $O(n)$ |
-| **Hardware** | Supercomputers | Global Idle Web |
-| **Philosophy** | Brute Force | Adjacent Possible |
+| Aspect | GNFS (reference) | IVI + DCP (this project) |
+|--------|-------------------|---------------------------|
+| **Structure** | Global algebraic / sieve | Digit-by-digit recurrence, local propagation |
+| **Complexity** | Sub-exponential (proven) | Linear in $n$ *if* constant branching holds (conjectural) |
+| **Execution** | Single large machine / cluster | Many small workers, DCP |
+| **Goal** | Production factorization | Exploring recurrence structure and pruning effectiveness |
 
 ## References
 
-For detailed mathematical foundations and proofs, see:
+For mathematical formulation and context:
 
 - Gerck, E. (2026). "IVI: Integer Vector Inversion by Diophantine Digit Propagation." Planalto Research.
 - van Bemmel, J. (2026). "Φᵈᶜᵖ: Factoring the Universe through the Web of the Adjacent Possible." Exergy ∞ LLC.
@@ -371,8 +371,4 @@ See [LICENSE](LICENSE) file for details.
 
 ## Contributing
 
-This is an experimental framework. Contributions, questions, and discussions are welcome.
-
----
-
-*"The impossible is simply a series of adjacent possibilities waiting to be explored."*
+This is an experimental framework for studying algorithmic structure and pruning. Contributions, questions, and rigorous analysis are welcome.
