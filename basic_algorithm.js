@@ -90,14 +90,15 @@ function workFunction(input) {
 }
 
 function initializeAlgorithm(p, q) {
-    const N = p * q;
-    const N_big = BigInt(N);
-    const N_digits = N.toString().split('').reverse().map(Number);
-    
+    const p_big = typeof p === 'bigint' ? p : BigInt(p);
+    const q_big = typeof q === 'bigint' ? q : BigInt(q);
+    const N_big = p_big * q_big;
+    const N_digits = N_big.toString().split('').reverse().map(Number);
+    const N_display = N_big <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(N_big) : N_big.toString();
     return {
-        p: p,
-        q: q,
-        N: N,
+        p: p_big <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(p_big) : p_big.toString(),
+        q: q_big <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(q_big) : q_big.toString(),
+        N: N_display,
         N_big: N_big,
         N_digits: N_digits,
         frontier: [{
@@ -120,6 +121,9 @@ function initializeAlgorithm(p, q) {
 }
 
 function stepAlgorithm(state) {
+    if (state.maxSteps != null && state.step >= state.maxSteps) {
+        return { ...state, done: true };
+    }
     const currentK = state.step + 1;
     
     if (currentK > state.N_digits.length) {

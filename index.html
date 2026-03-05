@@ -541,6 +541,13 @@
                 <select id="primeQ"></select>
             </div>
             <div class="control-group">
+                <label><input type="checkbox" id="rsa59Check" title="N = RSA-59 (59 digits), p and q each 30 digits"> Use N = RSA-59</label>
+            </div>
+            <div class="control-group">
+                <label for="maxStepsInput">Max steps:</label>
+                <input type="number" id="maxStepsInput" min="1" value="5" style="width: 4em; padding: 6px 8px; font-size: 1em; border: none; border-radius: 5px;">
+            </div>
+            <div class="control-group">
                 <label for="algorithmSelect">Algorithm:</label>
                 <select id="algorithmSelect">
                     <option value="basic">Basic (No Pruning)</option>
@@ -1244,10 +1251,15 @@
             }
         }
 
+        var RSA59_N = '71641520761751435455133616475667090434063332228247871795429';
+        var RSA59_p = '200429218120815554269743635437';
+        var RSA59_q = '357440504101388365610785389017';
+
         async function startVisualization() {
             const startBtn = document.getElementById('startBtn');
             const algorithmSelect = document.getElementById('algorithmSelect');
             const selectedAlgorithm = algorithmSelect.value;
+            const useRSA59 = document.getElementById('rsa59Check') && document.getElementById('rsa59Check').checked;
             
             // Load algorithm if changed
             if (currentAlgorithm !== selectedAlgorithm) {
@@ -1276,11 +1288,16 @@
                 return;
             }
             
-            const p = parseInt(document.getElementById('primeP').value);
-            const q = parseInt(document.getElementById('primeQ').value);
+            const p = useRSA59 ? RSA59_p : document.getElementById('primeP').value;
+            const q = useRSA59 ? RSA59_q : document.getElementById('primeQ').value;
 
             isRunning = true;
             algorithmState = initializeAlgorithm(p, q);
+            if (useRSA59) {
+                var maxStepsEl = document.getElementById('maxStepsInput');
+                var maxSteps = maxStepsEl ? Math.max(1, parseInt(maxStepsEl.value, 10) || 5) : 5;
+                algorithmState.maxSteps = maxSteps;
+            }
             // Store algorithm type for chart display
             algorithmState.algorithm = selectedAlgorithm;
             const status = document.getElementById('status');
@@ -1388,11 +1405,12 @@
         }
 
         async function runParallelBasesExploration() {
-            const p = parseInt(document.getElementById('primeP').value);
-            const q = parseInt(document.getElementById('primeQ').value);
+            const useRSA59 = document.getElementById('rsa59Check') && document.getElementById('rsa59Check').checked;
+            const p = useRSA59 ? RSA59_p : document.getElementById('primeP').value;
+            const q = useRSA59 ? RSA59_q : document.getElementById('primeQ').value;
             
             if (!p || !q) {
-                alert('Please select primes for p and q first');
+                alert('Please select primes for p and q first, or check Use N = RSA-59');
                 return;
             }
             
@@ -1446,7 +1464,7 @@
                     }
                     html += '</div>';
                     resultsContent.innerHTML = html;
-                });
+                }, useRSA59 ? (function() { var el = document.getElementById('maxStepsInput'); return { maxSteps: Math.max(1, parseInt(el && el.value, 10) || 5) }; })() : undefined);
                 
                 // Display final results (tiles)
                 let html = '<div style="margin-bottom: 15px;"><strong style="color: #8a2be2;">Final Results:</strong></div>';
@@ -1669,8 +1687,10 @@
                     const sb = step.stepBreakdown;
                     const pairs = (sb && sb.pairs) ? sb.pairs : [];
                     const golden = solutionPath.find(function(entry) { return entry.k === k; }) || (sb && sb.golden) || null;
+                    var activeCount = (step.branches || []).length;
                     bodyHtml += '<div class="step-block">';
                     bodyHtml += '<h3>Step ' + k + ' — target digit (base ' + base + '): ' + target + '</h3>';
+                    bodyHtml += '<p style="margin: 0 0 8px 0; font-size: 0.9em; color: #88ddff;">Active states: ' + activeCount + '</p>';
                     bodyHtml += '<div class="pairs-row">';
                     pairs.forEach(function(p) {
                         const isGolden = golden && p.pk === golden.pk && p.qk === golden.qk;

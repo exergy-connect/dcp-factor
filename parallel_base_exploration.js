@@ -65,6 +65,9 @@
      * @returns {Object} Updated state
      */
     function stepAlgorithmBase(state, base) {
+        if (state.maxSteps != null && state.step >= state.maxSteps) {
+            return { ...state, done: true };
+        }
         const currentK = state.step + 1;
         
         if (currentK > state.N_digits.length) {
@@ -227,8 +230,9 @@
      * @param {Function} onProgress - Optional callback for progress updates
      * @returns {Promise<Object>} Final algorithm state
      */
-    async function runAlgorithmForBase(p, q, base, onProgress) {
+    async function runAlgorithmForBase(p, q, base, onProgress, opts) {
         let state = initializeAlgorithmBase(p, q, base);
+        if (opts && opts.maxSteps != null) state.maxSteps = opts.maxSteps;
         
         while (!state.done && !state.success && state.step < state.N_digits.length) {
             state = stepAlgorithmBase(state, base);
@@ -263,7 +267,7 @@
      * @param {Function} onProgress - Optional callback for progress updates
      * @returns {Promise<Object>} Results object with results for each base
      */
-    async function runParallelBases(p, q, bases, onProgress) {
+    async function runParallelBases(p, q, bases, onProgress, opts) {
         const results = {};
         const promises = bases.map(async (base) => {
             try {
@@ -275,7 +279,7 @@
                             allResults: { ...results }
                         });
                     }
-                });
+                }, opts);
                 results[base] = result;
                 return { base, result };
             } catch (error) {
